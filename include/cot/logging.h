@@ -13,17 +13,17 @@
 #define _COT_INTERNAL_LOG_MESSAGE(category, format) \
   "[" category "] " format " (" __FILE__ ":" _COT_INTERNAL_STRINGIZE(__LINE__) ")"
 
-#define COT_LOG(category, format)           DebugPrint(0, _COT_INTERNAL_LOG_MESSAGE(category, format))
-#define COT_WARN(category, format)          DebugPrint(1, _COT_INTERNAL_LOG_MESSAGE(category, format))
-#define COT_ERROR(category, format)         DebugPrint(2, _COT_INTERNAL_LOG_MESSAGE(category, format))
+#define COT_LOG(category, format)           Debug_Print(0, _COT_INTERNAL_LOG_MESSAGE(category, format))
+#define COT_WARN(category, format)          Debug_Print(1, _COT_INTERNAL_LOG_MESSAGE(category, format))
+#define COT_ERROR(category, format)         Debug_Print(2, _COT_INTERNAL_LOG_MESSAGE(category, format))
 
-#define COT_LOGFMT(category, format, ...)   DebugPrint(0, _COT_INTERNAL_LOG_MESSAGE(category, format), __VA_ARGS__)
-#define COT_WARNFMT(category, format, ...)  DebugPrint(1, _COT_INTERNAL_LOG_MESSAGE(category, format), __VA_ARGS__)
-#define COT_ERRORFMT(category, format, ...) DebugPrint(2, _COT_INTERNAL_LOG_MESSAGE(category, format), __VA_ARGS__)
+#define COT_LOGFMT(category, format, ...)   Debug_Print(0, _COT_INTERNAL_LOG_MESSAGE(category, format), __VA_ARGS__)
+#define COT_WARNFMT(category, format, ...)  Debug_Print(1, _COT_INTERNAL_LOG_MESSAGE(category, format), __VA_ARGS__)
+#define COT_ERRORFMT(category, format, ...) Debug_Print(2, _COT_INTERNAL_LOG_MESSAGE(category, format), __VA_ARGS__)
 
 #define COT_ASSERT(expr) \
   if (!(expr)) {\
-    DebugPrint(2, "ASSERTION FAILED: " #expr " (" __FILE__ ":" _COT_INTERNAL_STRINGIZE(__LINE__) ")"); \
+    Debug_Print(2, "ASSERTION FAILED: " #expr " (" __FILE__ ":" _COT_INTERNAL_STRINGIZE(__LINE__) ")"); \
     WaitForever(); \
   }
 

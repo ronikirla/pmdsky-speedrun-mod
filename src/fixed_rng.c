@@ -53,14 +53,14 @@ void ResetRngSeed() {
   } else {
     calls_per_scenario++;
   }
-  DebugPrint0("scenario: %x\n", scenario);
-  DebugPrint0("level: %x\n", level);
-  DebugPrint0("call per scenario: %x\n", calls_per_scenario);
+  Debug_Print0("scenario: %x\n", scenario);
+  Debug_Print0("level: %x\n", level);
+  Debug_Print0("call per scenario: %x\n", calls_per_scenario);
   scenario_prev = scenario;
   level_prev = level;
 
   uint16_t seed = base_rng_seed ^ scenario ^ (level << 5) ^ (calls_per_scenario << 12);
-  DebugPrint0("seed: %x\n", seed);
+  Debug_Print0("seed: %x\n", seed);
   SetRngSeed(seed);
 }
 
@@ -70,7 +70,7 @@ __attribute__((used)) void HijackSetDungeonRngPreseedAndResetRngSeed() {
   ResetRngSeed();
   // We can use the full 32 bits of the base seed here because dungeon RNG is 32-bit
   int32_t preseed = (base_rng_seed & 0xFFFF0000) | Rand16Bit();
-  DebugPrint0("preseed: %x\n", preseed);
+  Debug_Print0("preseed: %x\n", preseed);
   SetDungeonRngPreseed(preseed);
 }
 
@@ -107,7 +107,7 @@ void UpdateSeedDisplay(char* buffer, bool empty) {
 
 // Set the rng seed to the value passed in the buffer
 __attribute__((used)) void SetFixedRNGSeed(char* buffer) {
-  DebugPrint0("base seed: %x", base_rng_seed);
+  Debug_Print0("base seed: %x", base_rng_seed);
   bool empty = strncmp(buffer, empty_result, INPUT_LEN) == 0;
   UpdateSeedDisplay(buffer, empty);
   // If the keyboard was left empty, disable fixed RNG
@@ -122,7 +122,7 @@ __attribute__((used)) void SetFixedRNGSeed(char* buffer) {
   for (uint16_t i = 0; i < INPUT_LEN; i++) {
     base_rng_seed += (buffer[i]) * (i + 1) * 256;
   }
-  DebugPrint0("base seed: %x\n", base_rng_seed);
+  Debug_Print0("base seed: %x\n", base_rng_seed);
 }
 
 // Replace the provided default value in the keyboard with a Rand16Bit() call result

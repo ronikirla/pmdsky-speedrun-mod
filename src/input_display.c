@@ -121,6 +121,5 @@ void UpdateInputDisplay(void) {
       strcat(input_display_string, button_string);
     }
   }
-  DebugPrint0("%s", input_display_string);
   UpdateHUDString(SPEEDRUN_HUD_INPUT_DISPLAY, input_display_string, 0);
 }
