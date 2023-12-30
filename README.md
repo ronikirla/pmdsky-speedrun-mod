@@ -63,7 +63,8 @@ Displays the current inputs using in-game icons.
 - [pmdsky-debug](https://github.com/UsernameFodder/pmdsky-debug)
 
 **Original readme of c-of-time below**
-To build the rom, first patch the cutsceneless hack into `rom.nds`, then follow the instructions below.
+
+To build the rom, first patch the cutsceneless hack into `rom.nds`, then follow the instructions.
 
 # c-of-time
 
