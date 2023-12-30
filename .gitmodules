@@ -1,3 +1,6 @@
 [submodule "pmdsky-debug"]
 	path = pmdsky-debug
 	url = https://github.com/UsernameFodder/pmdsky-debug
+[submodule "PMD-Sky-Cutsceneless-Hack"]
+	path = PMD-Sky-Cutsceneless-Hack
+	url = https://github.com/SBDWolf/PMD-Sky-Cutsceneless-Hack.git
