@@ -1,8 +1,9 @@
-// Enables the no music debug flag. Add this to the patches if you want to build the rom without music.
+// Enables the no music debug flag. Unhide this if you want to build the rom without music.
 
 .nds
+.include "symbols.asm"
 
-.open "arm9.bin","arm9-no_music.bin",0x02000000
+.open "arm9.bin", arm9_start
 
 .org 0x02017edc
 
