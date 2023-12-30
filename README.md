@@ -2,7 +2,7 @@
 
 # PMD Sky Speedrun Mod
 
-  **This mod aims to enhance the experience while speedrunning or racing PMD: Explorers of Sky in various ways. It can also be used for randomizer runs, etc. Since it's different from the vanilla game, separate leaderboards are hosted [here](https://www.speedrun.com/pmdskyext?h=Fast_any-ENG-no_WM-Cutsceneless).**
+  **This mod aims to enhance the experience of speedrunning or racing PMD: Explorers of Sky in various ways. It can also be used for randomizer runs, etc. Since it's different from the vanilla game, separate leaderboards are hosted [here](https://www.speedrun.com/pmdskyext?h=Fast_any-ENG-no_WM-Cutsceneless).**
 
 ## Cutsceneless
 
