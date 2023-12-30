@@ -64,7 +64,7 @@ Displays the current inputs using in-game icons.
 
 **Original readme of c-of-time below. Includes build instructions.**
 
-To obtain the base rom, apply the base patches in [/base_patches](/base_patches) first to a clean EU rom. The base rom includes the cutsceneless patch and some string changes, but technically the c-of-time patches should work on any rom that does not utilize the privately allocated `Overlay36.bin` area.
+To obtain the base rom, apply the base patches in [/base_patches](/base_patches) to a clean EU rom first. The base rom includes the cutsceneless patch and some string changes, but technically the c-of-time patches should work on any rom that does not utilize the privately allocated `Overlay36.bin` area.
 
 # c-of-time
 
