@@ -16,6 +16,9 @@ uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 2
 bool file_timer = true;
 struct play_time start_time;
 
+uint8_t last_frame;
+uint8_t curr_frame;
+
 struct split {
   char string[HUD_LEN];
   int x_offset;
@@ -25,6 +28,11 @@ struct split {
 struct split current_split;
 
 bool prev_held_timer = false;
+
+// Return true if the play time has not advanced and we are not in the main menu
+bool IsLagging() {
+  return (curr_frame == last_frame) && !OverlayIsLoaded(OGROUP_OVERLAY_1);
+}
 
 // Return difference a - b in frames in play_time structs
 int IGTDifferenceFrames(struct play_time* a, struct play_time* b) {
@@ -85,6 +93,13 @@ void HandleTimerInput(void) {
 
 void UpdateTimer(void) {
   struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
+  // Optimization to avoid all these costly operations during lag
+  last_frame = curr_frame;
+  curr_frame = igt->frames;
+  if (IsLagging()) {
+    return;
+  }
+
   struct play_time* run_igt = IGTDifference(igt, &start_time);
   
   uint8_t run_hundreths = hundredths_lookup[run_igt->frames];

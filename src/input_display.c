@@ -5,6 +5,7 @@
 #include "custom_headers.h"
 #include "hud.h"
 #include "speedrun_hud.h"
+#include "timer.h"
 
 #define NUM_BUTTONS 12
 #define STR_TAG_LEN 10
@@ -47,6 +48,9 @@ struct input_display_button {
 };
 
 void UpdateInputDisplay(void) {
+  if (IsLagging()) {
+    return;
+  }
   struct held_buttons held_buttons;
   GetHeldButtons(0, &held_buttons);
   struct input_display_button buttons[NUM_BUTTONS] = {

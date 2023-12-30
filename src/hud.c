@@ -74,20 +74,18 @@ void HUDCallback(int window_id) {};
 
 // Refreshes the window with the current strings behind the string pointers
 void UpdateHUD(enum hud_slot slot) {
-  if (slot == HUD_SLOT_NULL) {
+  int window_id = hud_status[slot].window_id;
+  if (slot == HUD_SLOT_NULL || window_id == -1) {
     return;
   }
-  int window_id = hud_status[slot].window_id;
-  if (window_id != -1) {
-    ClearWindow(window_id);
-    for (int i = 0; i < MAX_STRINGS; i++) {
-      char* string = hud_status[slot].strings[i];
-      if (string) {
-        DrawTextInWindow(window_id,
-                         *hud_status[slot].x_offsets[i],
-                         (slot == HUD_SLOT_BOTTOM) * TEXT_OFFSET_BOTTOM,
-                         string); 
-      }
+  ClearWindow(window_id);
+  for (int i = 0; i < MAX_STRINGS; i++) {
+    char* string = hud_status[slot].strings[i];
+    if (string) {
+      DrawTextInWindow(window_id,
+                        *hud_status[slot].x_offsets[i],
+                        (slot == HUD_SLOT_BOTTOM) * TEXT_OFFSET_BOTTOM,
+                        string); 
     }
     UpdateWindow(window_id);
   }

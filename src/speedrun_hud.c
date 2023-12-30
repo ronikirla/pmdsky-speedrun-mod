@@ -111,7 +111,10 @@ void AssignHUDSlots(void) {
       ClearHUDSlots();
       break;
     case HUD_DISPLAY_MINIMAL:
-      timer->base_x_offset = 0; 
+      if (timer->base_x_offset == TIMER_BOTTOM_X_OFFSET) {
+        timer->base_x_offset = 0;
+        timer->x_offset -= TIMER_BOTTOM_X_OFFSET;
+      }
       ClearHUDSlots();
       AssignHUDSlot(TIMER_SLOT_MINIMAL,
                     TIMER_SLOT_MINIMAL_STRING_IDX,
@@ -123,7 +126,10 @@ void AssignHUDSlots(void) {
                     &seed->x_offset);
       break;
     case HUD_DISPLAY_MAXIMAL:
-      timer->base_x_offset = TIMER_BOTTOM_X_OFFSET; 
+      if (timer->base_x_offset == 0) {
+        timer->base_x_offset = TIMER_BOTTOM_X_OFFSET;
+        timer->x_offset += TIMER_BOTTOM_X_OFFSET;
+      }
       ClearHUDSlots();
       AssignHUDSlot(TIMER_SLOT_MAXIMAL,
                     TIMER_SLOT_MAXIMAL_STRING_IDX,
