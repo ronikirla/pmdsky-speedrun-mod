@@ -16,7 +16,6 @@
 
 #define WINDOW_HEIGHT 2
 
-#define NOF_SLOTS 3
 #define MAX_STRINGS 8
 
 struct hud_window_status {
@@ -71,7 +70,6 @@ struct hud_window_status hud_status[] = {
 // Leave this empty since we want to implement our own handling and not worry about the
 // game's own callback system
 void HUDCallback(int window_id) {};
-
 // Refreshes the window with the current strings behind the string pointers
 void UpdateHUD(enum hud_slot slot) {
   int window_id = hud_status[slot].window_id;
@@ -83,9 +81,9 @@ void UpdateHUD(enum hud_slot slot) {
     char* string = hud_status[slot].strings[i];
     if (string) {
       DrawTextInWindow(window_id,
-                        *hud_status[slot].x_offsets[i],
-                        (slot == HUD_SLOT_BOTTOM) * TEXT_OFFSET_BOTTOM,
-                        string); 
+                       *hud_status[slot].x_offsets[i],
+                       (slot == HUD_SLOT_BOTTOM) * TEXT_OFFSET_BOTTOM,
+                       string); 
     }
     UpdateWindow(window_id);
   }
@@ -100,7 +98,7 @@ void AssignHUDSlot(enum hud_slot slot, int string_idx, char* string_pointer, uin
 
 // Set the string pointers of every HUD slot to null
 void ClearHUDSlots(void) {
-  for (int i = 0; i < NOF_SLOTS; i++) {
+  for (int i = 0; i < HUD_SLOTS; i++) {
     enum hud_slot slot = (enum hud_slot) i;
     for (int j = 0; j < MAX_STRINGS; j++) {
       AssignHUDSlot(slot, j, NULL, NULL);

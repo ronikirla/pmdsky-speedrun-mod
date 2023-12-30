@@ -13,4 +13,5 @@ __attribute__((used)) void FrameRoutine(void) {
   UpdateTimer();
   UpdateFPS();
   UpdateInputDisplay();
+  UpdateHUDSlots();
 }

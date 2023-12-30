@@ -43,9 +43,11 @@ struct speedrun_hud_strings {
   struct speedrun_hud_string fps;
   struct speedrun_hud_string input_display;
 };
-
 struct speedrun_hud_strings speedrun_hud_strings;
+
 bool prev_held_srh = false;
+
+bool hud_slot_needs_update[HUD_SLOTS];
 
 // Update the specified speedrun HUD string
 void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_offset) {
@@ -90,13 +92,27 @@ void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_of
     case HUD_DISPLAY_NONE:
       break;
     case HUD_DISPLAY_MINIMAL:
-      UpdateHUD(slot_minimal);
+      if (slot_minimal != HUD_SLOT_NULL) {
+        hud_slot_needs_update[slot_minimal] = true;
+      }
       break;
     case HUD_DISPLAY_MAXIMAL:
-      UpdateHUD(slot_maximal);
+      if (slot_maximal != HUD_SLOT_NULL) {
+        hud_slot_needs_update[slot_maximal] = true;
+      }
       break;
     default:
       break;
+  }
+}
+
+// Update the HUD slots at the end of every frame
+void UpdateHUDSlots(void) {
+  for (int i = 0; i < HUD_SLOTS; i++) {
+    if (hud_slot_needs_update[i]) {
+      hud_slot_needs_update[i] = false;
+      UpdateHUD((enum hud_slot) i);
+    }
   }
 }
 
