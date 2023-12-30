@@ -1,0 +1,15 @@
+/build
+/venv
+/-p
+
+out.*
+
+/.vscode
+
+/symbols-sym
+
+*.sav
+*.nds
+*.nds.skytemple
+
+symbols/generated_*.ld
