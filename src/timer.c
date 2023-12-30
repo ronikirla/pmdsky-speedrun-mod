@@ -49,12 +49,12 @@ __attribute__((used)) void ResetSplitRemainingFrames(void) {
   current_split.remaining_frames = SPLIT_SHOW_FRAMES;
 }
 
-__attribute__((used)) void HijackCalcChecksumAndSplit(int* param_1, uint32_t param_2) {
+__attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int size) {
   // param_1 is this when restoring a quicksave, we do not want to split on that
-  if ((int) param_1 != 0x2225924) {
+  if ((int) save_info != 0x2225924) {
     ResetSplitRemainingFrames();
   }
-  CalcChecksum(param_1, param_2);
+  CalcChecksum(save_info, size);
 }
 
 // Start+L for reset toggle, Select+L to show split time
