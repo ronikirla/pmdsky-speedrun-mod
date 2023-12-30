@@ -58,10 +58,7 @@ __attribute__((used)) void ResetSplitRemainingFrames(void) {
 }
 
 __attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int size) {
-  // param_1 is this when restoring a quicksave, we do not want to split on that
-  if ((int) save_info != 0x2225924) {
-    ResetSplitRemainingFrames();
-  }
+  current_split.remaining_frames = 0;
   CalcChecksum(save_info, size);
 }
 
