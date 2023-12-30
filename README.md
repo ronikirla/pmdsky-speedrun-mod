@@ -62,9 +62,9 @@ Displays the current inputs using in-game icons.
 - [c-of-time](https://github.com/SkyTemple/c-of-time)
 - [pmdsky-debug](https://github.com/UsernameFodder/pmdsky-debug)
 
-**Original readme of c-of-time below**
+**Original readme of c-of-time below. Includes build instructions.**
 
-To build the rom, first patch the cutsceneless hack into `rom.nds`, then follow the instructions.
+To obtain the base rom, apply the base patches in `/base_patches` first to a clean EU rom. The base rom includes the cutsceneless patch and some string changes, but technically the c-of-time patches should work on any rom that does not utilize the privately allocated `Overlay36.bin` area.
 
 # c-of-time
 
