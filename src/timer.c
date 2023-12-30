@@ -69,6 +69,7 @@ void HandleTimerInput(void) {
   if (held_buttons.start && held_buttons.l) {
     if (!prev_held_timer) {
       prev_held_timer = true;
+      current_split.remaining_frames = 0;
       if (file_timer) {
         struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
         memcpy(&start_time, igt, sizeof(struct play_time));
