@@ -1,34 +1,6 @@
 .nds
 .include "symbols.asm"
 
-.open "arm9.bin",0x02000000
-
-.org 0x02017edc
-
-.area 4
-    mov r0, 1
-.endarea
-
-.org 0x02017f5c
-
-.area 4
-    mov r0, 1
-.endarea
-
-.org 0x0201810c
-
-.area 4
-    mov r0, 1
-.endarea
-
-.org 0x0201818c
-
-.area 4
-    mov r0, 1
-.endarea
-
-.close
-
 .open "arm9.bin", arm9_start
     .org 0x02008f44
         b CustomSetBrightnessExit
