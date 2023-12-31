@@ -143,7 +143,9 @@ __attribute__((naked)) int HijackCreateSimpleMenuAndCloseHUD(void) {
 
 __attribute__((naked)) int HijackCloseSimpleMenuAndCreateHUD(void) {
   asm("stmdb sp!,{r0-r12}");
-  simple_menu_open -= 1;
+  if (simple_menu_open) {
+    simple_menu_open -= 1;
+  }
   // Additionally we need some delay, because the window system of the game is held together
   // by duct tape and completely corrupts everything if you try to open the HUD while the
   // simple menu has not fully closed yet.
