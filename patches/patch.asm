@@ -2,11 +2,9 @@
 .include "symbols.asm"
 
 .open "arm9.bin", arm9_start
+    // Overworld HUD drawing
     .org 0x02008f44
         b CustomSetBrightnessExit
-    // Overworld HUD drawing
-    .org HandleFades
-        //b CustomHandleFades
     // Update the timer every frame but only if overlay36 is fully loaded
     .org 0x020036b4
         ldr r0, [@overlay36_loaded]
@@ -27,6 +25,10 @@
     @continue:
     .org 0x020491bc
         bl HijackCalcChecksumAndSplit
+    .org 0x0202b4a8
+        bl HijackCreateSimpleMenuAndCloseHUD
+    .org 0x0202b7e0
+        b HijackCloseSimpleMenuAndCreateHUD
 .close
 
 .open "overlay29.bin", overlay29_start

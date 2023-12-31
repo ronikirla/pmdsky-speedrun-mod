@@ -18,6 +18,8 @@
 
 #define MAX_STRINGS 8
 
+#define MENU_CLOSE_HUD_CREATE_DELAY 15
+
 struct hud_window_status {
   int window_id;
   char* strings[MAX_STRINGS];
@@ -124,13 +126,43 @@ void CloseHUD(enum hud_slot slot) {
   hud_status[slot].window_id = -1;
 }
 
+int simple_menu_open;
+int hud_create_delay;
+
+// Count the number of open simple menus. Having any windows open while a simple menu is open
+// causes the prompts to not be able to be buffered. Therefore, we want to be able to close
+// the HUD to prevent that from happening.
+__attribute__((naked)) int HijackCreateSimpleMenuAndCloseHUD(void) {
+  asm("stmdb sp!,{r0-r12}");
+  simple_menu_open += 1;
+  asm("ldmia sp!,{r0-r12}");
+  asm("mov r6,r3");
+  asm("bx lr");
+}
+
+
+__attribute__((naked)) int HijackCloseSimpleMenuAndCreateHUD(void) {
+  asm("stmdb sp!,{r0-r12}");
+  simple_menu_open -= 1;
+  // Additionally we need some delay, because the window system of the game is held together
+  // by duct tape and completely corrupts everything if you try to open the HUD while the
+  // simple menu has not fully closed yet.
+  hud_create_delay = MENU_CLOSE_HUD_CREATE_DELAY;
+  asm("ldmia sp!,{r0-r12}");
+  asm("ldmia sp!,{r3,r4,r5,pc}");
+}
+
 // HUD creation/closing handling for all modes except dungeon mode. Hook into SetBrightness
 // so we can easily tell when the screen is faded.
 __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brightness) {
+  if (hud_create_delay > 0 && screen == SCREEN_MAIN) {
+    hud_create_delay--;
+    return;
+  }
   void(* hud_func)(enum hud_slot);
   // Faded as in fully black or white
   bool faded = (brightness >= 0xFF || brightness <= -0xFF);
-  if (faded) {
+  if (faded || (simple_menu_open && screen == SCREEN_MAIN)) {
     hud_func = &CloseHUD;
   } else {
     hud_func = &CreateHUD;
