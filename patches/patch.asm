@@ -33,6 +33,10 @@
         bl HijackCloseMenuRoutine
     .org 0x02034f2c
         bl HijackOpenMenuRoutine
+    .org 0x02027940
+        bl HijackNewWindowScreenCheckAndCheckOpenWindows
+    .org 0x02028510
+        bl HijackDeleteWindowAndCheckOpenWindows
 .close
 
 .open "overlay0.bin", overlay0_start
@@ -46,16 +50,6 @@
         // Instead of setting the 23-bits of the preseed we set it 
         // fully to prevent the previous state from affecting anything.
         bl HijackSetDungeonRngPreseedAndResetRngSeed
-    // Dungeon HUD drawing
-    .org 0x022e93cc
-        bl HijackTopScreenInitFuncAndDrawTopScreenText
-    .org 0x022e9528
-        bl HijackFreeTopScreenAndClearTopScreenText
-    .org 0x0234d518
-        mov r0, r4
-        mov r1, r5
-        bl UpdateDungeonFadeStruct
-        ldmia sp!, {r3,r4,r5,pc}
     // Dungeon mode exit
     .org 0x234cdc0
         bl ResetSplitRemainingFrames

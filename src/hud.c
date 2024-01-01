@@ -20,6 +20,8 @@
 
 #define MENU_CLOSE_HUD_CREATE_DELAY 15
 
+#define WINDOW_LIST_LEN 20
+
 struct hud_window_status {
   int window_id;
   char* strings[MAX_STRINGS];
@@ -182,8 +184,57 @@ __attribute__((used)) void HijackUnloadMenuStateCall(void) {
   UnloadMenuState();
 }
 
-// HUD creation/closing handling for all modes except dungeon mode. Hook into SetBrightness
-// so we can easily tell when the screen is faded.
+// Return number of open windows
+int GetNofOpenWindows(void) {
+  int result = 0;
+  for (int i = 0; i < WINDOW_LIST_LEN; i++) {
+    if (WINDOW_LIST.windows[i].valid) {
+      result++;
+    }
+  }
+  return result;
+}
+
+bool too_many_windows;
+
+// Close the HUD or recreate it depending on if there is enough space for its windows
+void HandleTooManyWindows(int open) {
+  // To be safe, close HUD at 19 windows. Doing it at 20 caused some crashes for some reason.
+  // Presumably the game assumes that there is room in the window list or something even before
+  // allocating the window.
+  if (open >= WINDOW_LIST_LEN - 1) {
+    too_many_windows = true;
+    for (int i = 0; i < HUD_SLOTS; i++) {
+      CloseHUD((enum hud_slot) i);
+    }
+  // We need to have 1 less window open before we open the HUD again because otherwise
+  // closing the HUD would cause enough slots to be free only for the HUD to be opened
+  // right back up again 
+  } else if (open + HUD_SLOTS <= WINDOW_LIST_LEN - 2) {
+    too_many_windows = false;
+  }
+}
+
+__attribute__((naked)) void HijackNewWindowScreenCheckAndCheckOpenWindows(void) {
+  asm("stmdb sp!,{r0-r12,lr}");
+  int open = GetNofOpenWindows();
+  HandleTooManyWindows(open);
+  asm("ldmia sp!,{r0-r12,lr}");
+  asm("mov r4,#0x0");
+  asm("bx lr");
+}
+
+__attribute__((naked)) void HijackDeleteWindowAndCheckOpenWindows(void) {
+  asm("strb r0,[r4,#0xb6]");
+  asm("stmdb sp!,{r0-r12,lr}");
+  int open = GetNofOpenWindows();
+  HandleTooManyWindows(open);
+  asm("ldmia sp!,{r0-r12,lr}");
+  asm("bx lr");
+}
+
+// HUD creation/closing handling. Hook into SetBrightness so we can easily tell when the screen is faded.
+// The reason we need to do this is because leaving any windows open over a fade will cause memory corruption.
 __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brightness) {
   void(* hud_func)(enum hud_slot);
   // Faded as in fully black or white
@@ -192,14 +243,21 @@ __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brigh
   GetHeldButtons(0, &held_buttons);
   // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
   bool start_held_during_fade = screen == SCREEN_MAIN && held_buttons.start && brightness != 0;
+  start_held_during_nonblocking_fade = start_held_during_nonblocking_fade && OverlayIsLoaded(OGROUP_OVERLAY_11);
   bool input_buffer_workaround = start_held_during_fade || start_held_during_nonblocking_fade || simple_menu_open;
-  if (faded || input_buffer_workaround) {
+  if (faded || input_buffer_workaround || too_many_windows) {
     hud_func = &CloseHUD;
   } else {
     // Very important, because the window system of the game is held together
     // by duct tape and completely corrupts everything if you try to create a
-    // text box while any menu is open. Disable this check in the quiz
-    if (menu_open && screen == SCREEN_MAIN && !OverlayIsLoaded(OGROUP_OVERLAY_13)) {
+    // text box while any menu is open. Disable this check in the main menu,
+    // quiz and sky jukebox because those are constantly in menu state and
+    // the corruption is not a concern since it can only happen in a 
+    // nonblocking fade state that is only used in ground mode.
+    if (menu_open && screen == SCREEN_MAIN &&
+        !OverlayIsLoaded(OGROUP_OVERLAY_1) &&
+        !OverlayIsLoaded(OGROUP_OVERLAY_13) &&
+        !OverlayIsLoaded(OGROUP_OVERLAY_9)) {
       return;
     }
     hud_func = &CreateHUD;
@@ -214,75 +272,5 @@ __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brigh
       break;
     default:
       break;
-  }
-}
-
-// These are used in dungeon mode for top screen handling
-__attribute__((used)) void HijackTopScreenInitFuncAndDrawTopScreenText(void(* fun)()) {
-  (*fun)();
-  CreateHUD(HUD_SLOT_TOP_LEFT);
-  CreateHUD(HUD_SLOT_TOP_RIGHT);
-}
-
-__attribute__((used)) void HijackFreeTopScreenAndClearTopScreenText() {
-  CloseHUD(HUD_SLOT_TOP_LEFT);
-  CloseHUD(HUD_SLOT_TOP_RIGHT);
-  FreeTopScreen();
-}
-
-// Rewrite the second half of HandleFadesDungeon to include HUD handling for the bottom screen
-__attribute__((used)) void UpdateDungeonFadeStruct(struct dungeon_fade* fstruct, enum screen screen) {
-  int result;
-  switch(fstruct->fade_type) {
-    case DUNGEON_FADE_0x0:
-      return;
-    case DUNGEON_FADE_NONE:
-      return;
-    case DUNGEON_FADE_IN:
-      result = fstruct->delta_brightness + fstruct->delta_delta_brightness;
-      fstruct->delta_brightness = result;
-      if (-1 < result) {
-        fstruct->delta_brightness = 0;
-        fstruct->fade_type = DUNGEON_FADE_NONE;
-      } else if (screen == SCREEN_MAIN) {
-        CreateHUD(HUD_SLOT_BOTTOM);
-      }
-      return;
-    case DUNGEON_FADE_OUT:
-      result = fstruct->delta_brightness - fstruct->delta_delta_brightness;
-      fstruct->delta_brightness = result;
-      if (result < -0xffff) {
-        fstruct->delta_brightness = 0xffff0000;
-        fstruct->fade_type = DUNGEON_FADE_NONE;
-        if (screen == SCREEN_MAIN) {
-          CloseHUD(HUD_SLOT_BOTTOM);
-        }
-      }
-      return;
-    // Idk when these cases happen (perhaps fade to white somewhere), just to be safe closing the HUD
-    case DUNGEON_FADE_0x4:
-      result = fstruct->delta_brightness - fstruct->delta_delta_brightness;
-      fstruct->delta_brightness = result;
-      if (result < 1) {
-        fstruct->delta_brightness = 0;
-        fstruct->fade_type = DUNGEON_FADE_NONE;
-        if (screen == SCREEN_MAIN) {
-          CloseHUD(HUD_SLOT_BOTTOM);
-        }
-      }
-      return;
-    case DUNGEON_FADE_0x5:
-      result = fstruct->delta_brightness + fstruct->delta_delta_brightness;
-      fstruct->delta_brightness = result;
-      if (0xffff < result) {
-        fstruct->delta_brightness = 0x10000;
-        fstruct->fade_type = DUNGEON_FADE_NONE;
-        if (screen == SCREEN_MAIN) {
-          CloseHUD(HUD_SLOT_BOTTOM);
-        }
-      }
-      return;
-    default:
-      return;
   }
 }
