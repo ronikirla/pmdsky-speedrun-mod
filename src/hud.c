@@ -126,47 +126,82 @@ void CloseHUD(enum hud_slot slot) {
   hud_status[slot].window_id = -1;
 }
 
-int simple_menu_open;
-int hud_create_delay;
+bool simple_menu_open;
 
-// Count the number of open simple menus. Having any windows open while a simple menu is open
+// Having any windows open while a simple menu is open
 // causes the prompts to not be able to be buffered. Therefore, we want to be able to close
 // the HUD to prevent that from happening.
 __attribute__((naked)) int HijackCreateSimpleMenuAndCloseHUD(void) {
-  asm("stmdb sp!,{r0-r12}");
-  simple_menu_open += 1;
-  asm("ldmia sp!,{r0-r12}");
+  asm("stmdb sp!,{r0-r12,lr}");
+  simple_menu_open = true;
+  asm("ldmia sp!,{r0-r12,lr}");
   asm("mov r6,r3");
   asm("bx lr");
 }
 
-
 __attribute__((naked)) int HijackCloseSimpleMenuAndCreateHUD(void) {
   asm("stmdb sp!,{r0-r12}");
-  if (simple_menu_open) {
-    simple_menu_open -= 1;
-  }
-  // Additionally we need some delay, because the window system of the game is held together
-  // by duct tape and completely corrupts everything if you try to open the HUD while the
-  // simple menu has not fully closed yet.
-  hud_create_delay = MENU_CLOSE_HUD_CREATE_DELAY;
+  simple_menu_open = false;
   asm("ldmia sp!,{r0-r12}");
   asm("ldmia sp!,{r3,r4,r5,pc}");
+}
+
+bool start_held_during_nonblocking_fade;
+
+// Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
+__attribute__((naked)) void HijackSetBrightnessNonblockingEntry(int brightness) {
+  asm("stmdb sp!,{r0-r12,lr}");
+  struct held_buttons held_buttons;
+  GetHeldButtons(0, &held_buttons);
+  start_held_during_nonblocking_fade = brightness != 0 && held_buttons.start;
+  asm("ldmia sp!,{r0-r12,lr}");
+  asm("mov r4,r0");
+  asm("bx lr");
+}
+
+bool menu_open;
+
+__attribute__((naked)) void HijackOpenMenuRoutine(void) {
+  asm("stmdb sp!,{r0-r12,lr}");
+  menu_open = true;
+  asm("ldmia sp!,{r0-r12,lr}");
+  asm("add r4,r12,#0x14");
+  asm("bx lr");
+}
+
+__attribute__((naked)) void HijackCloseMenuRoutine(void) {
+  asm("stmdb sp!,{r0-r12,lr}");
+  menu_open = false;
+  asm("ldmia sp!,{r0-r12,lr}");
+  asm("ldr r0,[r12,#0x0]");
+  asm("bx lr");
+}
+
+__attribute__((used)) void HijackUnloadMenuStateCall(void) {
+  menu_open = false;
+  UnloadMenuState();
 }
 
 // HUD creation/closing handling for all modes except dungeon mode. Hook into SetBrightness
 // so we can easily tell when the screen is faded.
 __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brightness) {
-  if (hud_create_delay > 0 && screen == SCREEN_MAIN) {
-    hud_create_delay--;
-    return;
-  }
   void(* hud_func)(enum hud_slot);
   // Faded as in fully black or white
   bool faded = (brightness >= 0xFF || brightness <= -0xFF);
-  if (faded || (simple_menu_open && screen == SCREEN_MAIN)) {
+  struct held_buttons held_buttons;
+  GetHeldButtons(0, &held_buttons);
+  // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
+  bool start_held_during_fade = screen == SCREEN_MAIN && held_buttons.start && brightness != 0;
+  bool input_buffer_workaround = start_held_during_fade || start_held_during_nonblocking_fade || simple_menu_open;
+  if (faded || input_buffer_workaround) {
     hud_func = &CloseHUD;
   } else {
+    // Very important, because the window system of the game is held together
+    // by duct tape and completely corrupts everything if you try to create a
+    // text box while any menu is open. Disable this check in the quiz
+    if (menu_open && screen == SCREEN_MAIN && !OverlayIsLoaded(OGROUP_OVERLAY_13)) {
+      return;
+    }
     hud_func = &CreateHUD;
   }
   switch(screen) {

@@ -14,3 +14,4 @@ SetBrightnessMain = 0x022eb1e0;
 SetBrightnessSub = 0x022eb214;
 SetBrightnessNonblocking = 0x022eb14c;
 SetBrightness = 0x02008f3c;
+UnloadMenuState = 0x02034a04;

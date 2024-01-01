@@ -29,6 +29,15 @@
         bl HijackCreateSimpleMenuAndCloseHUD
     .org 0x0202b7e0
         b HijackCloseSimpleMenuAndCreateHUD
+    .org 0x02034ec4
+        bl HijackCloseMenuRoutine
+    .org 0x02034f2c
+        bl HijackOpenMenuRoutine
+.close
+
+.open "overlay0.bin", overlay0_start
+    .org 0x022beb40
+        bl HijackUnloadMenuStateCall
 .close
 
 .open "overlay29.bin", overlay29_start
@@ -61,6 +70,8 @@
     // Special episode shop
     .org 0x234d2fc
         bl HijackGenerateKecleonItems1AndResetRngSeed
+    .org 0x022eb150
+        bl HijackSetBrightnessNonblockingEntry
 .close
 
 .open "overlay13.bin", overlay13_start
@@ -103,5 +114,4 @@
     .org 0x2337a94
         // Skip top screen change
         nop
-
 .close
