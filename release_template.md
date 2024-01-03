@@ -8,6 +8,9 @@ TL;DR:
 
 ---
 
+Both of these patches have to be applied on a European ROM. The US Codes patch makes the Wondermail System utilize the US version of codes, but **it still has to be applied on a European ROM**.
+Credits to reserve_cat from the PMD Speedruns Discord for the BAHAMUT Header Fix Patches.
+
 Both .xdelta and .bps patch files are provided.
 The .xdelta files are to be applied with xdelta, while the .bps are to be applied with flips.
 
