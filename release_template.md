@@ -3,8 +3,8 @@ Insert changelog
 See [here](/README.md) for instructions.
 TL;DR:
  - **start+select** to toggle HUD modes.
- - L+start to switch between file timer and a custom timer that starts from 0.
- - L+select to freeze the timer display for 10 seconds, automatically triggered at the end of each dungeon.
+ - **L+start** to switch between file timer and a custom timer that starts from 0.
+ - **L+select** to freeze the timer display for 10 seconds, automatically triggered at the end of each dungeon.
 
 ---
 
