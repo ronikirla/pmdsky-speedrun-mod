@@ -236,7 +236,7 @@ __attribute__((naked)) void HijackDeleteWindowAndCheckOpenWindows(void) {
 // There's some duplicate code for re-creating the keyboard when saying
 // "no" to confirming the team name in the guild. This code however doesn't
 // handle the top screen controls chart creation properly. It happens to
-// work in the vanilla game, but causes corruption with extra windows open.
+// work in the vanilla game but causes corruption with extra windows open.
 __attribute__((naked)) void HijackTeamNamePromptConfirm(void) {
   asm("stmdb sp!,{r0-r12,lr}");
   CloseHUD(HUD_SLOT_TOP_LEFT);
