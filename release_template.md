@@ -2,6 +2,7 @@ Insert changelog
 
 See [here](/README.md) for instructions.
 TL;DR:
+ - **Other** -> **RNG Seed** in the main menu to set up a fixed RNG Seed for racing with other people.
  - **start+select** to toggle HUD modes.
  - **L+start** to switch between file timer and a custom timer that starts from 0.
  - **L+select** to freeze the timer display for 10 seconds, automatically triggered at the end of each dungeon.
