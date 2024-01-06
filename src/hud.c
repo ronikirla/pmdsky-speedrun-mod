@@ -233,6 +233,19 @@ __attribute__((naked)) void HijackDeleteWindowAndCheckOpenWindows(void) {
   asm("bx lr");
 }
 
+// There's some duplicate code for re-creating the keyboard when saying
+// "no" to confirming the team name in the guild. This code however doesn't
+// handle the top screen controls chart creation properly. It happens to
+// work in the vanilla game but causes corruption with extra windows open.
+__attribute__((naked)) void HijackTeamNamePromptConfirm(void) {
+  asm("stmdb sp!,{r0-r12,lr}");
+  CloseHUD(HUD_SLOT_TOP_LEFT);
+  CloseHUD(HUD_SLOT_TOP_RIGHT);
+  asm("ldmia sp!,{r0-r12,lr}");
+  asm("cmp r0,#0x0");
+  asm("bx lr");
+}
+
 // HUD creation/closing handling. Hook into SetBrightness so we can easily tell when the screen is faded.
 // The reason we need to do this is because leaving any windows open over a fade will cause memory corruption.
 __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brightness) {

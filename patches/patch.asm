@@ -37,6 +37,8 @@
         bl HijackNewWindowScreenCheckAndCheckOpenWindows
     .org 0x02028510
         bl HijackDeleteWindowAndCheckOpenWindows
+    .org 0x02037e24
+        bl HijackTeamNamePromptConfirm
 .close
 
 .open "overlay0.bin", overlay0_start
