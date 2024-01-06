@@ -18,6 +18,8 @@ To activate this feature, go to **Other** in the **Main Menu** and choose **RNG 
 
 The RNG is influenced by your current story progress. This means that even if you visit e.g. Beach Cave multiple times during a run, it will be different each time. Even if the story doesn't progress, the same results won't appear twice. This means that if you spawn in a monster house and die, you can retry the dungeon without having that happen again, for example. After progressing to the next point in the story, however, the RNG becomes synced back up with everybody else even if they did not die.
 
+Note that fixed seed runs are only leaderboard-eligible if you go into the seed blind and do not receive substantial information from other racers during your run!
+
 ## Speedrun HUD
 
 This is a display for useful supplementary information during a speedrun. This display can be toggled by pressing **start+select**, rotating between three modes: **off**, **minimal** and **maximal**. The HUD is off by default. If you enable RNG Sync, the HUD will always be turned on in order to display the current seed.
