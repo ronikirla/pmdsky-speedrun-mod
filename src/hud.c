@@ -74,6 +74,7 @@ struct hud_window_status hud_status[] = {
 // Leave this empty since we want to implement our own handling and not worry about the
 // game's own callback system
 void HUDCallback(int window_id) {};
+
 // Refreshes the window with the current strings behind the string pointers
 void UpdateHUD(enum hud_slot slot) {
   int window_id = hud_status[slot].window_id;
@@ -89,8 +90,8 @@ void UpdateHUD(enum hud_slot slot) {
                        (slot == HUD_SLOT_BOTTOM) * TEXT_OFFSET_BOTTOM,
                        string); 
     }
-    UpdateWindow(window_id);
   }
+  UpdateWindow(window_id);
 }
 
 // Set a string and x-offset pointers of a specified HUD slot
