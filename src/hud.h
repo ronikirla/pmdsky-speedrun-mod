@@ -18,6 +18,3 @@ void AssignHUDSlot(enum hud_slot slot, int string_idx, char* string_pointer, uin
 
 // Set the string pointers of every HUD slot to null
 void ClearHUDSlots(void);
-
-// Tracks whether any menu is open
-extern bool menu_open;

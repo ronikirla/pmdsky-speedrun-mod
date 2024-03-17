@@ -7,7 +7,6 @@
 #include "custom_headers.h"
 #include "timer.h"
 #include "speedrun_hud.h"
-#include "hud.h"
 
 #define OFFSET 38
 
@@ -15,6 +14,9 @@ uint32_t idle_time = 0;
 uint32_t actions = 0;
 enum action prev_action = ACTION_NOTHING;
 bool prevent_aps_count = false;
+
+// Scuffed ram search for whether menu is open
+int* menu_open_aps = 0x20afad0;
 
 // Count the action when SetLeaderAction() returns, i.e, when the player has inputted an action
 __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
@@ -45,7 +47,7 @@ void UpdateAPS(void) {
     UpdateHUDString(SPEEDRUN_HUD_APS, "", OFFSET);
     return;
   }
-  if (GetLeaderAction()->val == ACTION_NOTHING && !menu_open) {
+  if (GetLeaderAction()->val == ACTION_NOTHING && *menu_open_aps == 0) {
     idle_time++;
     prev_action = ACTION_NOTHING;
   }
