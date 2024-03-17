@@ -55,6 +55,9 @@
     // Dungeon mode exit
     .org 0x234cdc0
         bl ResetSplitRemainingFrames
+    // APS count
+    .org 0x022ece10
+        bl HijackSetLeaderActionAndCountAction
 .close
 
 .open "overlay11.bin", overlay11_start
