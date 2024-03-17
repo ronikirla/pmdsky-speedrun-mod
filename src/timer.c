@@ -5,11 +5,11 @@
 #include "custom_headers.h"
 #include "hud.h"
 #include "speedrun_hud.h"
+#include "aps.h"
+#include "timer.h"
 
 #define CHAR_WIDTH 6
 #define DEFAULT_COL 10
-#define SPLIT_SHOW_FRAMES 600
-#define SPLIT_COLOR_TAG "[CS:G]"
 
 uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 21, 23, 25, 26, 28, 30, 31, 33, 35, 36, 38, 40, 41, 43, 45, 46, 48, 50, 51, 53, 55, 56, 58, 60, 61, 63, 65, 66, 68, 70, 71, 73, 75, 76, 78, 80, 81, 83, 85, 86, 88, 90, 91, 93, 95, 96, 98};
 
@@ -55,6 +55,7 @@ struct play_time* IGTDifference(struct play_time* a, struct play_time* b) {
 
 __attribute__((used)) void ResetSplitRemainingFrames(void) {
   current_split.remaining_frames = SPLIT_SHOW_FRAMES;
+  ResetAPSRemainingFrames();
 }
 
 __attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int size) {
@@ -68,6 +69,7 @@ void HandleTimerInput(void) {
   GetHeldButtons(0, &held_buttons);
   if (held_buttons.start && held_buttons.l) {
     if (!prev_held_timer) {
+      ResetAPS();
       prev_held_timer = true;
       current_split.remaining_frames = 0;
       if (file_timer) {
