@@ -101,10 +101,10 @@ void UpdateTimer(void) {
   struct play_time* run_igt = IGTDifference(igt, &start_time);
   
   uint8_t run_hundreths = hundredths_lookup[run_igt->frames];
-  uint64_t seconds_divided = _s32_div_f(run_igt->seconds, 60);
+  uint64_t seconds_divided = _u32_div_f(run_igt->seconds, 60);
   uint8_t run_seconds = seconds_divided >> 32;
   uint32_t run_minutes = seconds_divided & 0xFFFF;
-  uint64_t minutes_divided = _s32_div_f(run_minutes, 60);
+  uint64_t minutes_divided = _u32_div_f(run_minutes, 60);
   run_minutes = minutes_divided >> 32;
   uint16_t run_hours = minutes_divided & 0xFFFF;
 
