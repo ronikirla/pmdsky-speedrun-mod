@@ -45,7 +45,7 @@ void UpdateAPS(void) {
     UpdateHUDString(SPEEDRUN_HUD_APS, "", OFFSET);
     return;
   }
-  if (DUNGEON_PTR_MASTER->no_action_in_progress && !menu_open) {
+  if (GetLeaderAction()->val == ACTION_NOTHING && !menu_open) {
     idle_time++;
     prev_action = ACTION_NOTHING;
   }
