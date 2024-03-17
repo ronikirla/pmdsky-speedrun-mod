@@ -58,6 +58,8 @@
     // APS count
     .org 0x022ece10
         bl HijackSetLeaderActionAndCountAction
+    .org 0x022f19f8
+        bl HijackShouldLeaderKeepRunningAndPreventCount
 .close
 
 .open "overlay11.bin", overlay11_start
