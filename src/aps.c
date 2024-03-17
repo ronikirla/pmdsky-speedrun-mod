@@ -33,8 +33,8 @@ void UpdateAPS(void) {
 
   uint64_t aps_divided = _u32_div_f(actions * 60, idle_time);
   uint32_t aps_quotient = aps_divided & 0xFFFF;
-  uint32_t aps_remaidner = aps_divided >> 32;
-  uint64_t remainder_divided = _u32_div_f(aps_remaidner * 10, idle_time);
+  uint32_t aps_remainder = aps_divided >> 32;
+  uint64_t remainder_divided = _u32_div_f(aps_remainder * 10, idle_time);
   uint32_t aps_decimal = remainder_divided & 0xFFFF;
 
   char aps_string[HUD_LEN];
