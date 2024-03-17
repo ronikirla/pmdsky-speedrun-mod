@@ -53,7 +53,7 @@ struct play_time* IGTDifference(struct play_time* a, struct play_time* b) {
   return diff;
 }
 
-__attribute__((used)) void ResetSplitRemainingFrames(void) {
+void ResetSplitRemainingFrames(void) {
   current_split.remaining_frames = SPLIT_SHOW_FRAMES;
 }
 
