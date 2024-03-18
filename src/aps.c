@@ -15,6 +15,8 @@ uint32_t actions = 0;
 enum action prev_action = ACTION_NOTHING;
 bool prevent_aps_count = false;
 
+bool first_turn = false;
+
 // Scuffed ram search for whether menu is open
 int* menu_open_aps = 0x20afad0;
 
@@ -37,6 +39,7 @@ void ResetAPSRemainingFrames(void) {
 
 // Count the action when SetLeaderAction() returns, i.e, when the player has inputted an action
 __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
+  first_turn = true;
   SetLeaderAction();
   enum action curr_action = GetLeaderAction()->val;
   // Don't count instances where the action is caused by buffering or being locked to a dash
@@ -63,14 +66,15 @@ void UpdateAPS(void) {
     current_aps_split.remaining_frames--;
   }
   if (!OverlayIsLoaded(OGROUP_OVERLAY_29)) {
-    if (current_aps_split.remaining_frames < 1) {
+    first_turn = false;
+    if (current_aps_split.remaining_frames <= 0) {
       ResetAPS();
       UpdateHUDString(SPEEDRUN_HUD_APS, "", OFFSET);
     }
     return;
   }
 
-  if (GetLeaderAction()->val == ACTION_NOTHING && *menu_open_aps == 0) {
+  if (first_turn && GetLeaderAction()->val == ACTION_NOTHING && *menu_open_aps == 0) {
     idle_time++;
     prev_action = ACTION_NOTHING;
   }
@@ -84,7 +88,7 @@ void UpdateAPS(void) {
   char aps_string[HUD_LEN];
   snprintf(aps_string, HUD_LEN, "%d.%01d aps", aps_quotient, aps_decimal);
 
-  if (current_aps_split.remaining_frames < 1) {
+  if (current_aps_split.remaining_frames <= 0) {
     snprintf(current_aps_split.string, HUD_LEN, "%s%s", SPLIT_COLOR_TAG, aps_string);
     UpdateHUDString(SPEEDRUN_HUD_APS, aps_string, OFFSET);
   }
