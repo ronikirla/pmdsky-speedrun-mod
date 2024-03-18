@@ -10,14 +10,13 @@
 
 #define OFFSET 38
 
+#define IDLE_COLOR_TAG "[CS:A]"
+
 uint32_t idle_time = 0;
 uint32_t actions = 0;
-enum action prev_action = ACTION_NOTHING;
+enum action prev_action = ACTION_USE_STAIRS;
+enum action most_recent_action = ACTION_USE_STAIRS;
 bool prevent_aps_count = false;
-
-// Track whether the first turn of the floor has been given to the leader to start tracking aps
-// Trying to read if before that can lead to a crash as the struct of the leader isn't initialized.
-bool first_turn = false;
 
 // Scuffed ram search for whether menu is open
 int* menu_open_aps = 0x20afad0;
@@ -41,30 +40,22 @@ void ResetAPSRemainingFrames(void) {
 
 // Count the action when SetLeaderAction() returns, i.e, when the player has inputted an action
 __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
-  first_turn = true;
+  most_recent_action = ACTION_NOTHING;
   SetLeaderAction();
   enum action curr_action = GetLeaderAction()->val;
   // Don't count instances where the action is caused by buffering or being locked to a dash
   bool separate_input_action = curr_action == ACTION_PASS_TURN
-                         || curr_action == ACTION_WALK && !DUNGEON_PTR_MASTER->leader_running
-                         || prevent_aps_count;
+                            || curr_action == ACTION_WALK && !DUNGEON_PTR_MASTER->leader_running
+                            || prevent_aps_count;
   if (prev_action != curr_action || !separate_input_action) {
     actions++;
   }
-  prev_action = curr_action;
+  most_recent_action = curr_action;
 }
 
 __attribute__((used)) bool HijackShouldLeaderKeepRunningAndPreventCount(void) {
   prevent_aps_count = ShouldLeaderKeepRunning();
   return prevent_aps_count;
-}
-
-__attribute__((naked)) void HijackFloorIsOverAndUnsetFirstTurn(void) {
-  asm("stmdb sp!,{r0-r12,lr}");
-  first_turn = false;
-  asm("ldmia sp!,{r0-r12,lr}");
-  asm("mov r0,#0x0");
-  asm("bx lr");
 }
 
 void UpdateAPS(void) {
@@ -76,7 +67,6 @@ void UpdateAPS(void) {
     current_aps_split.remaining_frames--;
   }
   if (!OverlayIsLoaded(OGROUP_OVERLAY_29)) {
-    first_turn = false;
     idle_time = 0;
     actions = 0;
     if (current_aps_split.remaining_frames <= 0) {
@@ -85,12 +75,12 @@ void UpdateAPS(void) {
     return;
   }
 
+  prev_action = most_recent_action;
 
   char aps_color[HUD_LEN] = "";
-  if (first_turn && GetLeaderAction()->val == ACTION_NOTHING && *menu_open_aps == 0) {
+  if (most_recent_action == ACTION_NOTHING && *menu_open_aps == 0) {
     idle_time++;
-    prev_action = ACTION_NOTHING;
-    strncat(aps_color, "[CS:A]", HUD_LEN);
+    strncat(aps_color, IDLE_COLOR_TAG, HUD_LEN);
   } else {
     
   }
