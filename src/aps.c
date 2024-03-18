@@ -74,9 +74,14 @@ void UpdateAPS(void) {
     return;
   }
 
+
+  char aps_color[HUD_LEN] = "";
   if (first_turn && GetLeaderAction()->val == ACTION_NOTHING && *menu_open_aps == 0) {
     idle_time++;
     prev_action = ACTION_NOTHING;
+    strncat(aps_color, "[CS:A]", HUD_LEN);
+  } else {
+    
   }
 
   uint64_t aps_divided = _u32_div_f(actions * 60, idle_time);
@@ -86,7 +91,8 @@ void UpdateAPS(void) {
   uint32_t aps_decimal = remainder_divided & 0xFFFF;
 
   char aps_string[HUD_LEN];
-  snprintf(aps_string, HUD_LEN, "%d.%01d aps", aps_quotient, aps_decimal);
+
+  snprintf(aps_string, HUD_LEN, "%s%d.%01d aps", aps_color, aps_quotient, aps_decimal);
 
   if (current_aps_split.remaining_frames <= 0) {
     snprintf(current_aps_split.string, HUD_LEN, "%s%s", SPLIT_COLOR_TAG, aps_string);
