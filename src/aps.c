@@ -15,6 +15,8 @@ uint32_t actions = 0;
 enum action prev_action = ACTION_NOTHING;
 bool prevent_aps_count = false;
 
+// Track whether the first turn of the floor has been given to the leader to start tracking aps
+// Trying to read if before that can lead to a crash as the struct of the leader isn't initialized.
 bool first_turn = false;
 
 // Scuffed ram search for whether menu is open
@@ -57,6 +59,14 @@ __attribute__((used)) bool HijackShouldLeaderKeepRunningAndPreventCount(void) {
   return prevent_aps_count;
 }
 
+__attribute__((naked)) void HijackFloorIsOverAndUnsetFirstTurn(void) {
+  asm("stmdb sp!,{r0-r12,lr}");
+  first_turn = false;
+  asm("ldmia sp!,{r0-r12,lr}");
+  asm("mov r0,#0x0");
+  asm("bx lr");
+}
+
 void UpdateAPS(void) {
   if (IsLagging()) {
     return;
@@ -67,8 +77,9 @@ void UpdateAPS(void) {
   }
   if (!OverlayIsLoaded(OGROUP_OVERLAY_29)) {
     first_turn = false;
+    idle_time = 0;
+    actions = 0;
     if (current_aps_split.remaining_frames <= 0) {
-      ResetAPS();
       UpdateHUDString(SPEEDRUN_HUD_APS, "", OFFSET);
     }
     return;

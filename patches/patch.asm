@@ -60,6 +60,9 @@
         bl HijackSetLeaderActionAndCountAction
     .org 0x022f19f8
         bl HijackShouldLeaderKeepRunningAndPreventCount
+    // When floor is over
+    .org 0x022e046c
+        bl HijackFloorIsOverAndUnsetFirstTurn
 .close
 
 .open "overlay11.bin", overlay11_start
