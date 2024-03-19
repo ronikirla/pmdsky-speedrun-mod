@@ -11,11 +11,13 @@
 #define OFFSET 38
 
 #define IDLE_COLOR_TAG "[CS:A]"
+#define PAUSE_SKIP_COLOR_TAG "[CS:B]"
 
 uint32_t idle_time = 0;
 uint32_t actions = 0;
 enum action prev_action = ACTION_NOTHING;
 bool prevent_aps_count = false;
+bool message_log_pause = false;
 
 // Scuffed ram search for whether menu is open
 int* menu_open_aps = 0x20afad0;
@@ -56,6 +58,27 @@ __attribute__((used)) bool HijackShouldLeaderKeepRunningAndPreventCount(void) {
   return prevent_aps_count;
 }
 
+// Detect missed pause skips, copy pasted decomp with mostly unknown variables
+__attribute__((used)) void CustomMessageLogPauseLoop(undefined4 param_1, undefined4 message_log_struct, undefined2* message_log_inputs) {
+  int i = 0;
+  message_log_pause = true;
+  while( true ) {
+    if (0xef < i) {
+      break;
+    }
+    if (*(short *)(message_log_struct + 0x90) < 0xb4) {
+      break;
+    }
+    if ((*message_log_inputs & 3) == 3) {
+      break;
+    }
+    if ((message_log_inputs[1] & 0xf0) != 0) break;
+    AdvanceFrame(param_1);
+    i = i + 1;
+  }
+  message_log_pause = false;
+}
+
 void UpdateAPS(void) {
   if (IsLagging()) {
     return;
@@ -74,11 +97,12 @@ void UpdateAPS(void) {
   }
 
   char aps_color[HUD_LEN] = "";
-  if (DUNGEON_PTR_MASTER->no_action_in_progress && *menu_open_aps == 0) {
+  if (message_log_pause) {
+    idle_time++;
+    strncat(aps_color, PAUSE_SKIP_COLOR_TAG, HUD_LEN);
+  } else if (DUNGEON_PTR_MASTER->no_action_in_progress && *menu_open_aps == 0) {
     idle_time++;
     strncat(aps_color, IDLE_COLOR_TAG, HUD_LEN);
-  } else {
-    
   }
 
   uint64_t aps_divided = _u32_div_f(actions * 60, idle_time);

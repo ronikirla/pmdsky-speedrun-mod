@@ -60,6 +60,14 @@
         bl HijackSetLeaderActionAndCountAction
     .org 0x022f19f8
         bl HijackShouldLeaderKeepRunningAndPreventCount
+    // Detect missed pause skips
+    .org 0x0234c674
+        mov r0, r5
+        mov r1, r6
+        mov r2, r7
+        bl CustomMessageLogPauseLoop
+        ldmia sp!,{r3,r4,r5,r6,r7,pc}
+
 .close
 
 .open "overlay11.bin", overlay11_start
