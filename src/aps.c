@@ -14,8 +14,7 @@
 
 uint32_t idle_time = 0;
 uint32_t actions = 0;
-enum action prev_action = ACTION_USE_STAIRS;
-enum action most_recent_action = ACTION_USE_STAIRS;
+enum action prev_action = ACTION_NOTHING;
 bool prevent_aps_count = false;
 
 // Scuffed ram search for whether menu is open
@@ -40,7 +39,6 @@ void ResetAPSRemainingFrames(void) {
 
 // Count the action when SetLeaderAction() returns, i.e, when the player has inputted an action
 __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
-  most_recent_action = ACTION_NOTHING;
   SetLeaderAction();
   enum action curr_action = GetLeaderAction()->val;
   // Don't count instances where the action is caused by buffering or being locked to a dash
@@ -50,7 +48,7 @@ __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
   if (prev_action != curr_action || !separate_input_action) {
     actions++;
   }
-  most_recent_action = curr_action;
+  prev_action = curr_action;
 }
 
 __attribute__((used)) bool HijackShouldLeaderKeepRunningAndPreventCount(void) {
@@ -75,10 +73,8 @@ void UpdateAPS(void) {
     return;
   }
 
-  prev_action = most_recent_action;
-
   char aps_color[HUD_LEN] = "";
-  if (most_recent_action == ACTION_NOTHING && *menu_open_aps == 0) {
+  if (DUNGEON_PTR_MASTER->no_action_in_progress && *menu_open_aps == 0) {
     idle_time++;
     strncat(aps_color, IDLE_COLOR_TAG, HUD_LEN);
   } else {
