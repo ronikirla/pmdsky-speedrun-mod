@@ -49,6 +49,7 @@ __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
                             || prevent_aps_count;
   if (prev_action != curr_action || !separate_input_action) {
     actions++;
+    current_aps_split.remaining_frames = 0;
   }
   prev_action = curr_action;
 }
@@ -101,6 +102,7 @@ void UpdateAPS(void) {
     idle_time++;
     strncat(aps_color, PAUSE_SKIP_COLOR_TAG, HUD_LEN);
   } else if (DUNGEON_PTR_MASTER->no_action_in_progress && *menu_open_aps == 0) {
+    prev_action = ACTION_NOTHING;
     idle_time++;
     strncat(aps_color, IDLE_COLOR_TAG, HUD_LEN);
   }
@@ -116,7 +118,7 @@ void UpdateAPS(void) {
   snprintf(aps_string, HUD_LEN, "%s%d.%01d aps", aps_color, aps_quotient, aps_decimal);
 
   if (current_aps_split.remaining_frames <= 0) {
-    snprintf(current_aps_split.string, HUD_LEN, "%s%s", SPLIT_COLOR_TAG, aps_string);
+    snprintf(current_aps_split.string, HUD_LEN, "%s%d.%01d aps", SPLIT_COLOR_TAG, aps_quotient, aps_decimal);
     UpdateHUDString(SPEEDRUN_HUD_APS, aps_string, OFFSET);
   }
 }
