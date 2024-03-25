@@ -81,6 +81,9 @@
         bl HijackGenerateKecleonItems1AndResetRngSeed
     .org 0x022eb150
         bl HijackSetBrightnessNonblockingEntry
+    // Increase number of memory blocks in the overlay13 memory arena.
+    .org 0x022e912c
+        mov r1,#0x37
 .close
 
 .open "overlay13.bin", overlay13_start
