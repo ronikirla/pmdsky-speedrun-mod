@@ -13,14 +13,15 @@
 #define IDLE_COLOR_TAG "[CS:A]"
 #define PAUSE_SKIP_COLOR_TAG "[CS:B]"
 
-uint32_t idle_time = 0;
-uint32_t actions = 0;
-enum action prev_action = ACTION_NOTHING;
-bool prevent_aps_count = false;
-bool message_log_pause = false;
+struct aps {
+  uint32_t idle_time;
+  uint32_t actions;
+  enum action prev_action;
+  bool running_prevent_aps_count;
+  bool message_log_pause;
+};
 
-// Scuffed ram search for whether menu is open
-int* menu_open_aps = 0x20afad0;
+struct aps aps;
 
 struct aps_split {
   char string[HUD_LEN];
@@ -30,8 +31,8 @@ struct aps_split {
 struct aps_split current_aps_split;
 
 void ResetAPS(void) {
-  idle_time = 0;
-  actions = 0;
+  aps.idle_time = 0;
+  aps.actions = 0;
   current_aps_split.remaining_frames = 0;
 }
 
@@ -46,23 +47,23 @@ __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
   // Don't count instances where the action is caused by buffering or being locked to a dash
   bool separate_input_action = curr_action == ACTION_PASS_TURN
                             || curr_action == ACTION_WALK && !DUNGEON_PTR_MASTER->leader_running
-                            || prevent_aps_count;
-  if (prev_action != curr_action || !separate_input_action) {
-    actions++;
+                            || aps.running_prevent_aps_count;
+  if (aps.prev_action != curr_action || !separate_input_action) {
+    aps.actions++;
     current_aps_split.remaining_frames = 0;
   }
-  prev_action = curr_action;
+  aps.prev_action = curr_action;
 }
 
 __attribute__((used)) bool HijackShouldLeaderKeepRunningAndPreventCount(void) {
-  prevent_aps_count = ShouldLeaderKeepRunning();
-  return prevent_aps_count;
+  aps.running_prevent_aps_count = ShouldLeaderKeepRunning();
+  return aps.running_prevent_aps_count;
 }
 
 // Detect missed pause skips, copy pasted decomp with mostly unknown variables
 __attribute__((used)) void CustomMessageLogPauseLoop(undefined4 param_1, undefined4 message_log_struct, undefined2* message_log_inputs) {
   int i = 0;
-  message_log_pause = true;
+  aps.message_log_pause = true;
   while( true ) {
     if (0xef < i) {
       break;
@@ -77,7 +78,7 @@ __attribute__((used)) void CustomMessageLogPauseLoop(undefined4 param_1, undefin
     AdvanceFrame(param_1);
     i = i + 1;
   }
-  message_log_pause = false;
+  aps.message_log_pause = false;
 }
 
 void UpdateAPS(void) {
@@ -89,28 +90,31 @@ void UpdateAPS(void) {
     current_aps_split.remaining_frames--;
   }
   if (!OverlayIsLoaded(OGROUP_OVERLAY_29)) {
-    idle_time = 0;
-    actions = 0;
+    aps.idle_time = 0;
+    aps.actions = 0;
     if (current_aps_split.remaining_frames <= 0) {
       UpdateHUDString(SPEEDRUN_HUD_APS, "", OFFSET);
     }
     return;
   }
 
+  // Scuffed ram search for whether menu is open
+  int* menu_open_aps = 0x20afad0;
+
   char aps_color[HUD_LEN] = "";
-  if (message_log_pause) {
-    idle_time++;
+  if (aps.message_log_pause) {
+    aps.idle_time++;
     strncat(aps_color, PAUSE_SKIP_COLOR_TAG, HUD_LEN);
-  } else if (DUNGEON_PTR_MASTER->no_action_in_progress && *menu_open_aps == 0) {
-    prev_action = ACTION_NOTHING;
-    idle_time++;
+  } else if (DUNGEON_PTR_MASTER->no_action_in_progress && *menu_open_aps == 0 && GetLeaderAction()->val == ACTION_NOTHING) {
+    aps.prev_action = ACTION_NOTHING;
+    aps.idle_time++;
     strncat(aps_color, IDLE_COLOR_TAG, HUD_LEN);
   }
 
-  uint64_t aps_divided = _u32_div_f(actions * 60, idle_time);
+  uint64_t aps_divided = _u32_div_f(aps.actions * 60, aps.idle_time);
   uint32_t aps_quotient = aps_divided & 0xFFFF;
   uint32_t aps_remainder = aps_divided >> 32;
-  uint64_t remainder_divided = _u32_div_f(aps_remainder * 10, idle_time);
+  uint64_t remainder_divided = _u32_div_f(aps_remainder * 10, aps.idle_time);
   uint32_t aps_decimal = remainder_divided & 0xFFFF;
 
   char aps_string[HUD_LEN];
