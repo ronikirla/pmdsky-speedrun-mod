@@ -25,10 +25,10 @@ Note that fixed seed runs are only leaderboard-eligible if you go into the seed 
 This is a display for useful supplementary information during a speedrun. This display can be toggled by pressing **start+select**, rotating between three modes: **off**, **minimal** and **maximal**. The HUD is off by default. If you enable RNG Sync, the HUD will always be turned on in order to display the current seed.
 
 The information displayed in each mode is described in the table below. The descriptions of the individual components can be found after.
-| Mode | Timer | Seed display | FPS counter | Input display |
-|--|--|--|--|--|
-| Minimal | Top screen | Top screen | *Hidden* | *Hidden* |
-| Maximal| Bottom screen | Top screen | Bottom screen | Bottom screen |
+| Mode | Timer | Seed display | FPS counter | APS counter | Input display |
+|--|--|--|--|--|--|
+| Minimal | Top screen | Top screen | *Hidden* | *Hidden* | *Hidden* |
+| Maximal| Bottom screen | Top screen | Bottom screen | Bottom screen | | Bottom screen |
 
 ### Timer
 
@@ -47,6 +47,12 @@ This component displays the current RNG Sync Seed, if applicable. Cannot be hidd
 Displays the current frame rate. This is defined as the ratio between frames where the timer advances and frames where the RNG advances over a monitoring window of 0.25 seconds. As such, it's more of a general lag counter as the picture can sometimes be updated during loads, but for practical purposes it is the same thing.
 
 The reason for its inclusion is mainly the fact that this game lags a lot while dashing in corridors, so this can be used to more easily measure that lag. Knowing this is interesting, as the dashing lag varies depending on platform, so this complements the in-game timer quite well.
+
+### APS counter
+
+Displays your current actions per seconds of idle time. This can be used to measure your movement speed. Pink color indicates that you're currently idle,
+while dark red means that you are missing a pause skip (the game is waiting for a B+A or dpad input to advance). The counter resets at the start of every
+dungeon.
 
 ### Input display
 
