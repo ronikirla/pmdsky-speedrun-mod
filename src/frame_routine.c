@@ -3,6 +3,7 @@
 #include "speedrun_hud.h"
 #include "timer.h"
 #include "fps.h"
+#include "aps.h"
 #include "input_display.h"
 
 // This function gets called every frame on RNG advance, can be used
@@ -12,6 +13,7 @@ __attribute__((used)) void FrameRoutine(void) {
   HandleTimerInput();
   UpdateTimer();
   UpdateFPS();
+  UpdateAPS();
   UpdateInputDisplay();
   UpdateHUDSlots();
 }
