@@ -55,6 +55,19 @@
     // Dungeon mode exit
     .org 0x234cdc0
         bl ResetSplitRemainingFrames
+    // APS count
+    .org 0x022ece10
+        bl HijackSetLeaderActionAndCountAction
+    .org 0x022f19f8
+        bl HijackShouldLeaderKeepRunningAndPreventCount
+    // Detect missed pause skips
+    .org 0x0234c674
+        mov r0, r5
+        mov r1, r6
+        mov r2, r7
+        bl CustomMessageLogPauseLoop
+        ldmia sp!,{r3,r4,r5,r6,r7,pc}
+
 .close
 
 .open "overlay11.bin", overlay11_start
@@ -68,6 +81,9 @@
         bl HijackGenerateKecleonItems1AndResetRngSeed
     .org 0x022eb150
         bl HijackSetBrightnessNonblockingEntry
+    // Increase number of memory blocks in the overlay13 memory arena.
+    .org 0x022e912c
+        mov r1,#0x37
 .close
 
 .open "overlay13.bin", overlay13_start

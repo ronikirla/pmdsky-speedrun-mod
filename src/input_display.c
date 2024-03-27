@@ -26,7 +26,7 @@
 #define DIR_WIDTH           12
 #define NORMAL_WIDTH        11
 
-#define BASE_OFFSET 50
+#define BASE_OFFSET 78
 
 #define OFFSET_LEFT   0
 #define OFFSET_RIGHT  OFFSET_LEFT

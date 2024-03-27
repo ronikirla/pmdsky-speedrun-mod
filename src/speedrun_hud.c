@@ -16,6 +16,8 @@
 #define TIMER_SLOT_MAXIMAL_STRING_IDX 0
 #define FPS_SLOT_MAXIMAL HUD_SLOT_BOTTOM
 #define FPS_SLOT_MAXIMAL_STRING_IDX 1
+#define APS_SLOT_MAXIMAL HUD_SLOT_BOTTOM
+#define APS_SLOT_MAXIMAL_STRING_IDX 3
 #define INPUT_DISPLAY_SLOT_MAXIMAL HUD_SLOT_BOTTOM
 #define INPUT_DISPLAY_SLOT_MAXIMAL_STRING_IDX 2
 #define SEED_SLOT_MAXIMAL HUD_SLOT_TOP_RIGHT
@@ -41,6 +43,7 @@ struct speedrun_hud_strings {
   struct speedrun_hud_string timer;
   struct speedrun_hud_string seed;
   struct speedrun_hud_string fps;
+  struct speedrun_hud_string aps;
   struct speedrun_hud_string input_display;
 };
 struct speedrun_hud_strings speedrun_hud_strings;
@@ -54,6 +57,7 @@ void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_of
   struct speedrun_hud_string* timer = &speedrun_hud_strings.timer;
   struct speedrun_hud_string* seed = &speedrun_hud_strings.seed;
   struct speedrun_hud_string* fps = &speedrun_hud_strings.fps;
+  struct speedrun_hud_string* aps = &speedrun_hud_strings.aps;
   struct speedrun_hud_string* input_display = &speedrun_hud_strings.input_display;
   char* loc;
   enum hud_slot slot_minimal;
@@ -76,6 +80,12 @@ void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_of
       fps->x_offset = x_offset + fps->base_x_offset;
       slot_minimal = HUD_SLOT_NULL;
       slot_maximal = FPS_SLOT_MAXIMAL;
+      break;
+    case SPEEDRUN_HUD_APS:
+      loc = aps->string;
+      aps->x_offset = x_offset + aps->base_x_offset;
+      slot_minimal = HUD_SLOT_NULL;
+      slot_maximal = APS_SLOT_MAXIMAL;
       break;
     case SPEEDRUN_HUD_INPUT_DISPLAY:
       loc = input_display->string;
@@ -121,6 +131,7 @@ void AssignHUDSlots(void) {
   struct speedrun_hud_string* timer = &speedrun_hud_strings.timer;
   struct speedrun_hud_string* seed = &speedrun_hud_strings.seed;
   struct speedrun_hud_string* fps = &speedrun_hud_strings.fps;
+  struct speedrun_hud_string* aps = &speedrun_hud_strings.aps;
   struct speedrun_hud_string* input_display = &speedrun_hud_strings.input_display;
   switch(hud_display_mode) {
     case HUD_DISPLAY_NONE:
@@ -159,6 +170,10 @@ void AssignHUDSlots(void) {
                     FPS_SLOT_MAXIMAL_STRING_IDX,
                     fps->string,
                     &fps->x_offset);
+      AssignHUDSlot(APS_SLOT_MAXIMAL,
+                    APS_SLOT_MAXIMAL_STRING_IDX,
+                    aps->string,
+                    &aps->x_offset);
       AssignHUDSlot(INPUT_DISPLAY_SLOT_MAXIMAL,
                     INPUT_DISPLAY_SLOT_MAXIMAL_STRING_IDX,
                     input_display->string,

@@ -3,10 +3,11 @@
 #include "hud.h"
 
 enum speedrun_hud_string_type {
-  SPEEDRUN_HUD_TIMER = 0,
-  SPEEDRUN_HUD_SEED = 1,
-  SPEEDRUN_HUD_FPS = 2,
-  SPEEDRUN_HUD_INPUT_DISPLAY = 3
+  SPEEDRUN_HUD_TIMER,
+  SPEEDRUN_HUD_SEED,
+  SPEEDRUN_HUD_FPS,
+  SPEEDRUN_HUD_APS,
+  SPEEDRUN_HUD_INPUT_DISPLAY
 };
 
 // Update the specified speedrun HUD string
