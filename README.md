@@ -28,7 +28,7 @@ The information displayed in each mode is described in the table below. The desc
 | Mode | Timer | Seed display | FPS counter | APS counter | Input display |
 |--|--|--|--|--|--|
 | Minimal | Top screen | Top screen | *Hidden* | *Hidden* | *Hidden* |
-| Maximal| Bottom screen | Top screen | Bottom screen | Bottom screen | | Bottom screen |
+| Maximal| Bottom screen | Top screen | Bottom screen | Bottom screen | Bottom screen |
 
 ### Timer
 
