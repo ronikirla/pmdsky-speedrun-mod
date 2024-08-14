@@ -163,6 +163,7 @@ __attribute__((naked)) void HijackSetBrightnessNonblockingEntry(int brightness) 
 }
 
 bool menu_open;
+bool name_prompt_fix;
 
 __attribute__((naked)) void HijackOpenMenuRoutine(void) {
   asm("stmdb sp!,{r0-r12,lr}");
@@ -175,6 +176,7 @@ __attribute__((naked)) void HijackOpenMenuRoutine(void) {
 __attribute__((naked)) void HijackCloseMenuRoutine(void) {
   asm("stmdb sp!,{r0-r12,lr}");
   menu_open = false;
+  name_prompt_fix = false;
   asm("ldmia sp!,{r0-r12,lr}");
   asm("ldr r0,[r12,#0x0]");
   asm("bx lr");
@@ -182,7 +184,15 @@ __attribute__((naked)) void HijackCloseMenuRoutine(void) {
 
 __attribute__((used)) void HijackUnloadMenuStateCall(void) {
   menu_open = false;
+  name_prompt_fix = false;
   UnloadMenuState();
+}
+
+// Fixes a mysterious crash that only happens on hardware with some ROM loading methods
+// when saying no to the player name prompt with the HUD open
+__attribute__((used)) void HijackPlayerNamePromptAndCloseHUD(void) {
+  name_prompt_fix = true;
+  NamePrompt(0,0,0);
 }
 
 // Return number of open windows
@@ -258,7 +268,7 @@ __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brigh
   // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
   bool start_held_during_fade = screen == SCREEN_MAIN && held_buttons.start && brightness != 0;
   start_held_during_nonblocking_fade = start_held_during_nonblocking_fade && OverlayIsLoaded(OGROUP_OVERLAY_11);
-  bool input_buffer_workaround = start_held_during_fade || start_held_during_nonblocking_fade || simple_menu_open;
+  bool input_buffer_workaround = start_held_during_fade || start_held_during_nonblocking_fade || simple_menu_open || name_prompt_fix;
   if (faded || input_buffer_workaround || too_many_windows) {
     hud_func = &CloseHUD;
   } else {

@@ -39,6 +39,30 @@
         bl HijackDeleteWindowAndCheckOpenWindows
     .org 0x02037e24
         bl HijackTeamNamePromptConfirm
+//    // Generate custom missions
+//    .org 0x0205e958
+//        // Set main board to spawn 8 missions
+//        mov r0, 7
+//    .org 0x0205e968
+//        // Set outlaw board to spawn 8 missions
+//        mov r0, 7
+//    .org 0x0205eb68 
+//        // Provide index as an argument to our function       
+//        mov r0, r9
+//    .org 0x0205eb70
+//        bl GenerateCustomMission
+//    .org 0x0205eb84
+//        // Skip setting random mission rewards
+//        nop
+//    .org 0x0205ec00
+//        // Provide index as an argument to our function    
+//        mov r0, r9
+//        add r0, 8
+//    .org 0x0205ec0c
+//        bl GenerateCustomMission
+//    .org 0x0205ec20
+//        // Skip setting random mission rewards
+//        nop
 .close
 
 .open "overlay0.bin", overlay0_start
@@ -67,7 +91,8 @@
         mov r2, r7
         bl CustomMessageLogPauseLoop
         ldmia sp!,{r3,r4,r5,r6,r7,pc}
-
+    .org 0x0230d118
+        //nop
 .close
 
 .open "overlay11.bin", overlay11_start
@@ -84,6 +109,9 @@
     // Increase number of memory blocks in the overlay13 memory arena.
     .org 0x022e912c
         mov r1,#0x37
+    // Fix myserious crash on hardware with the name prompt
+    .org 0x022e6b98
+        bl HijackPlayerNamePromptAndCloseHUD
 .close
 
 .open "overlay13.bin", overlay13_start
