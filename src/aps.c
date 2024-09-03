@@ -120,8 +120,8 @@ void UpdateAPS(void) {
   char aps_string[HUD_LEN];
 
   snprintf(aps_string, HUD_LEN, "%s%d.%01d aps", aps_color, aps_quotient, aps_decimal);
-
-  if (current_aps_split.remaining_frames <= 0) {
+  
+  if (current_aps_split.remaining_frames <= 0 && !IsLagCooldown()) {
     snprintf(current_aps_split.string, HUD_LEN, "%s%d.%01d aps", SPLIT_COLOR_TAG, aps_quotient, aps_decimal);
     UpdateHUDString(SPEEDRUN_HUD_APS, aps_string, OFFSET);
   }

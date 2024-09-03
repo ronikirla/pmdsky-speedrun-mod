@@ -12,3 +12,5 @@ bool IsLagging();
 void HandleTimerInput(void);
 
 void UpdateTimer(void);
+
+bool IsLagCooldown(void);

@@ -26,7 +26,7 @@ void UpdateFPS(void) {
     } else {
       snprintf(fps_string, HUD_LEN, "%d fps", fps); 
     }
-    if (!IsLagging()) {
+    if (!IsLagCooldown()) {
       UpdateHUDString(SPEEDRUN_HUD_FPS, fps_string, 2);
     }
   } else {
