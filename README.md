@@ -60,7 +60,7 @@ Displays the current inputs using in-game icons.
 
 ## Known issues
 
-- The text placement has been optimized so that it does not collide with other UI elements, but due to the janky window system, it is njot always possible to do perfectly. There are some instances of text clipping out, such as the top screen text getting partly covered by the top screen map in dungeons. However, this top screen setting  is suboptimal for speedruns either way due to losing time to loads, so it is not a high priorty.
+- The text placement has been optimized so that it does not collide with other UI elements, but due to the janky window system, it is not always possible to do perfectly. There are some instances of text clipping out, such as the top screen text getting partly covered by the top screen map in dungeons. However, this top screen setting  is suboptimal for speedruns either way due to losing time to loads, so it is not a high priorty.
 - The HUD cannot be seen during most fades. This is another limitation of the window system and cannot be fixed without low level tinkering.
 
 ## Credits
