@@ -60,7 +60,7 @@ Displays the current inputs using in-game icons.
 
 ## Known issues
 
-- The text placement has been optimized so that it does not collide with other UI elements, but due to the janky window system, it is not always possible to do perfectly. There are some instances of text clipping out, such as the top screen text getting partly covered by the top screen map in dungeons. However, this top screen setting  is suboptimal for speedruns either way due to losing time to loads, so it is not a high priorty.
+- The text placement has been optimized so that it does not collide with other UI elements, but due to the janky window system, it is njot always possible to do perfectly. There are some instances of text clipping out, such as the top screen text getting partly covered by the top screen map in dungeons. However, this top screen setting  is suboptimal for speedruns either way due to losing time to loads, so it is not a high priorty.
 - The HUD cannot be seen during most fades. This is another limitation of the window system and cannot be fixed without low level tinkering.
 
 ## Credits
@@ -73,6 +73,8 @@ Displays the current inputs using in-game icons.
 **Original readme of c-of-time below. Includes build instructions.**
 
 To obtain the base rom, apply the base patches in [/base_patches](/base_patches) to a clean EU rom first. The base rom includes the cutsceneless patch and some string changes, but technically the c-of-time patches should work on any rom that does not utilize the privately allocated `Overlay36.bin` area.
+
+The compiler arm-none-eabi-gcc version 13.2.Rel1 was used to build this. Newer versions seem to cause compilation errors.
 
 # c-of-time
 
@@ -97,7 +99,7 @@ If you want to build pure C projects, continue below.
 ## Project setup
 1. Install [Python](https://www.python.org/downloads/).
 2. Install GCC and Binutils for `arm-none-eabi`. See [install_gcc.md](install_gcc.md) for information on how to install it.
-3. Clone this repository *recursively* with `git clone --recursive https://github.com/tech-ticks/c-of-time.git`. Make sure that you enter the correct directory before continuing (e.g. `cd c-of-time`).
+3. Clone this repository *recursively* with `git clone --recursive <repo>`. Make sure that you enter the correct directory before continuing (e.g. `cd c-of-time`).
   - If you don't have Git installed, click the green "Code" button on GitHub to download this repository, then do the same for [pmdsky-debug](https://github.com/UsernameFodder/pmdsky-debug). Finally, extract both .zip files and copy the `pmdsky-debug` folder into the `c-of-time` folder.
 4. Install Python dependencies: `pip3 install pyyaml ndspy`
 5. Patch a Pokémon Mystery Dungeon: Explorers of Sky ROM with the [`ExtraSpace` patch by End45](https://github.com/End45/EoS-asm-hacks/blob/main/src/ExtraSpace.asm). You can apply the patch with [SkyTemple](https://skytemple.org):
