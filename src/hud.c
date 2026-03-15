@@ -39,8 +39,8 @@ struct hud_window_status hud_status[] = {
       .y_offset = 0,
       .width = WINDOW_WIDTH_TOP,
       .height = WINDOW_HEIGHT,
-      .screen = SCREEN_SUB,
-      .box_type = BOX_TYPE_INVISIBLE
+      .screen = {SCREEN_SUB},
+      .box_type = {BOX_TYPE_INVISIBLE}
     }
   },
   {
@@ -52,8 +52,8 @@ struct hud_window_status hud_status[] = {
       .y_offset = 0,
       .width = WINDOW_WIDTH_TOP,
       .height = WINDOW_HEIGHT,
-      .screen = SCREEN_SUB,
-      .box_type = BOX_TYPE_INVISIBLE
+      .screen = {SCREEN_SUB},
+      .box_type = {BOX_TYPE_INVISIBLE}
     }
   },
   {
@@ -65,8 +65,8 @@ struct hud_window_status hud_status[] = {
       .y_offset = WINDOW_OFFSET_BOTTOM,
       .width = WINDOW_WIDTH_BOTTOM,
       .height = WINDOW_HEIGHT,
-      .screen = SCREEN_MAIN,
-      .box_type = BOX_TYPE_INVISIBLE
+      .screen = {SCREEN_MAIN},
+      .box_type = {BOX_TYPE_INVISIBLE}
     }
   }
 };
@@ -155,7 +155,7 @@ bool start_held_during_nonblocking_fade;
 __attribute__((naked)) void HijackSetBrightnessNonblockingEntry(int brightness) {
   asm("stmdb sp!,{r0-r12,lr}");
   struct held_buttons held_buttons;
-  GetHeldButtons(0, &held_buttons);
+  GetHeldButtons(0, (undefined*) &held_buttons);
   start_held_during_nonblocking_fade = brightness != 0 && held_buttons.start;
   asm("ldmia sp!,{r0-r12,lr}");
   asm("mov r4,r0");
@@ -264,7 +264,7 @@ __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brigh
   // Faded as in fully black or white
   bool faded = (brightness >= 0xFF || brightness <= -0xFF);
   struct held_buttons held_buttons;
-  GetHeldButtons(0, &held_buttons);
+  GetHeldButtons(0, (undefined*) &held_buttons);
   // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
   bool start_held_during_fade = screen == SCREEN_MAIN && held_buttons.start && brightness != 0;
   start_held_during_nonblocking_fade = start_held_during_nonblocking_fade && OverlayIsLoaded(OGROUP_OVERLAY_11);

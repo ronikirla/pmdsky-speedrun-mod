@@ -185,7 +185,7 @@ void AssignHUDSlots(void) {
 // Read inputs to switch between HUD modes
 void HandleHUDToggle(void) {
   struct held_buttons held_buttons;
-  GetHeldButtons(0, &held_buttons);
+  GetHeldButtons(0, (undefined*) &held_buttons);
   if (held_buttons.start && held_buttons.select) {
     if (!prev_held_srh) {
       prev_held_srh = true;

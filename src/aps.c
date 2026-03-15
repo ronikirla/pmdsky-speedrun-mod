@@ -46,7 +46,7 @@ __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
   enum action curr_action = GetLeaderAction()->val;
   // Don't count instances where the action is caused by buffering or being locked to a dash
   bool separate_input_action = curr_action == ACTION_PASS_TURN
-                            || curr_action == ACTION_WALK && !DUNGEON_PTR_MASTER->leader_running
+                            || (curr_action == ACTION_WALK && !DUNGEON_PTR_MASTER->leader_running)
                             || aps.running_prevent_aps_count;
   if (aps.prev_action != curr_action || !separate_input_action) {
     aps.actions++;
@@ -99,7 +99,7 @@ void UpdateAPS(void) {
   }
 
   // Scuffed ram search for whether menu is open
-  int* menu_open_aps = 0x20afad0;
+  int* menu_open_aps = (int*) 0x20afad0;
 
   char aps_color[HUD_LEN] = "";
   if (aps.message_log_pause) {

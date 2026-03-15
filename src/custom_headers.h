@@ -23,3 +23,7 @@ struct held_buttons {
     uint8_t _padding : 4;
 };
 ASSERT_SIZE(struct held_buttons, 2);
+
+void UnloadMenuState(void);
+
+void NamePrompt(int param_1, int param_2, int param_3);

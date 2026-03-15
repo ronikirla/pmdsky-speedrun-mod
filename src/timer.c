@@ -66,7 +66,7 @@ __attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int 
 // Start+L for reset toggle, Select+L to show split time
 void HandleTimerInput(void) {
   struct held_buttons held_buttons;
-  GetHeldButtons(0, &held_buttons);
+  GetHeldButtons(0, (undefined*) &held_buttons);
   if (held_buttons.start && held_buttons.l) {
     if (!prev_held_timer) {
       ResetAPS();
