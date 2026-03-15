@@ -83,7 +83,7 @@ An environment for hooking and linking to Pokémon Mystery Dungeon: Explorers of
 ## Credits
 This project is loosely based on [EternalCode's template](https://github.com/EternalCode/Empty-Template). The build configuration is based on scripts provided by [devkitPro](https://devkitpro.org). The patch format was inspired by [Starlight](https://github.com/shadowninja108/Starlight).
 
-Special thanks to [UsernameFodder](https://github.com/UsernameFodder) for the [pmdsky-debug](https://github.com/UsernameFodder/pmdsky-debug) project, [End45](https://github.com/End45) for the *ExtraSpace* patch and irdkwia for their research on item, move and special process effects.
+Special thanks to [UsernameFodder](https://github.com/UsernameFodder) for the [pmdsky-debug](https://github.com/UsernameFodder/pmdsky-debug) project, [Frostbyte](https://github.com/Frostbyte0x70) for the *ExtraSpace* patch and [irdkwia](https://github.com/irdkwia) for their research on item, move and special process effects.
 
 ## Rust subsystem
 **NOTE: The `main` branch does currently not contain the Rust subsystem anymore**, as it's support
