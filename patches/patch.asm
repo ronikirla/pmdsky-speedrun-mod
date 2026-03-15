@@ -2,6 +2,9 @@
 .include "symbols.asm"
 
 .open "arm9.bin", arm9_start
+    // Optimization: Skip waiting for VCount 0 at the start of a frame
+    .org 0x0200345c
+        nop
     // Overworld HUD drawing
     .org 0x02008f44
         b CustomSetBrightnessExit
@@ -39,6 +42,23 @@
         bl HijackDeleteWindowAndCheckOpenWindows
     .org 0x02037e24
         bl HijackTeamNamePromptConfirm
+    // Optimization: only call SubstitutePlaceholderStringTags when actually logging a message.
+    // This skips a cart read which takes signficant time
+    .org 0x22ffc0c
+        nop
+    .org 0x22ffc6c
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffc80
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffc94
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcc8
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcdc
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcfc
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+
 //    // Generate custom missions
 //    .org 0x0205e958
 //        // Set main board to spawn 8 missions
