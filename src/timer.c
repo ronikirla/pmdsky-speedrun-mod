@@ -10,14 +10,11 @@
 
 #define CHAR_WIDTH 6
 #define DEFAULT_COL 10
-#define LAG_PAUSE 4
 
 uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 21, 23, 25, 26, 28, 30, 31, 33, 35, 36, 38, 40, 41, 43, 45, 46, 48, 50, 51, 53, 55, 56, 58, 60, 61, 63, 65, 66, 68, 70, 71, 73, 75, 76, 78, 80, 81, 83, 85, 86, 88, 90, 91, 93, 95, 96, 98};
 
 bool file_timer = true;
 struct play_time start_time;
-
-uint8_t lag_timer;
 
 uint8_t last_frame;
 uint8_t curr_frame;
@@ -94,25 +91,12 @@ void HandleTimerInput(void) {
   }
 }
 
-bool IsLagCooldown(void) {
-  return lag_timer > 1;
-}
-
 void UpdateTimer(void) {
   struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
   // Optimization to avoid all these costly operations during lag
   last_frame = curr_frame;
   curr_frame = igt->frames;
   if (IsLagging()) {
-    if (lag_timer == 0) {
-      lag_timer = LAG_PAUSE;
-    }
-    return;
-  } else if (lag_timer > 0) {
-    lag_timer--;
-  }
-
-  if (IsLagCooldown()) {
     return;
   }
 
