@@ -5,8 +5,8 @@
 #include "custom_headers.h"
 
 __attribute__((used)) void SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser(
-    int string_id, struct entity* entity, undefined4 param_3, int message_id
+    struct entity* entity, int message_id
 ) {
-    SubstitutePlaceholderStringTags(string_id, entity, param_3);
+    SubstitutePlaceholderStringTags(0, entity, 0);
     LogMessageByIdWithPopupCheckUser(entity, message_id);
 }
