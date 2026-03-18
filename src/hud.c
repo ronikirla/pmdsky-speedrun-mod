@@ -151,12 +151,16 @@ __attribute__((naked)) int HijackCloseSimpleMenuAndCreateHUD(void) {
 
 bool start_held_during_nonblocking_fade;
 
-// Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
-__attribute__((naked)) void HijackSetBrightnessNonblockingEntry(int brightness) {
-  asm("stmdb sp!,{r0-r12,lr}");
+void SubSetBrightnessNonblockingEntry(int brightness) {
   struct held_buttons held_buttons;
   GetHeldButtons(0, (undefined*) &held_buttons);
   start_held_during_nonblocking_fade = brightness != 0 && held_buttons.start;
+}
+
+// Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
+__attribute__((naked)) void HijackSetBrightnessNonblockingEntry(int brightness) {
+  asm("stmdb sp!,{r0-r12,lr}");
+  SubSetBrightnessNonblockingEntry(brightness);
   asm("ldmia sp!,{r0-r12,lr}");
   asm("mov r4,r0");
   asm("bx lr");

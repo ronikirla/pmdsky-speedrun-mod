@@ -1,6 +1,6 @@
 #pragma once
 
-#define HUD_LEN 1024
+#define HUD_LEN 512
 #define HUD_SLOTS 3
 
 enum hud_slot {

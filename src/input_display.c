@@ -47,10 +47,9 @@ struct input_display_button {
   uint8_t x_offset;
 };
 
+
+
 void UpdateInputDisplay(void) {
-  if (IsLagging()) {
-    return;
-  }
   struct held_buttons held_buttons;
   GetHeldButtons(0, (undefined*) &held_buttons);
   struct input_display_button buttons[NUM_BUTTONS] = {
@@ -115,7 +114,6 @@ void UpdateInputDisplay(void) {
       .x_offset = OFFSET_SELECT
     }
   };
-
   char input_display_string[HUD_LEN] = "";
   for (int i = 0; i < NUM_BUTTONS; i++) {
     struct input_display_button button = buttons[i];
@@ -125,5 +123,6 @@ void UpdateInputDisplay(void) {
       strcat(input_display_string, button_string);
     }
   }
+  Debug_Print0("%s", input_display_string);
   UpdateHUDString(SPEEDRUN_HUD_INPUT_DISPLAY, input_display_string, 0);
 }

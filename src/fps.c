@@ -26,9 +26,7 @@ void UpdateFPS(void) {
     } else {
       snprintf(fps_string, HUD_LEN, "%d fps", fps); 
     }
-    if (!IsLagging()) {
-      UpdateHUDString(SPEEDRUN_HUD_FPS, fps_string, 2);
-    }
+    UpdateHUDString(SPEEDRUN_HUD_FPS, fps_string, 2);
   } else {
     is_prev_frames_filled = (idx == MONITORING_WINDOW - 1);
   }

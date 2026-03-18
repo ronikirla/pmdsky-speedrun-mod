@@ -8,24 +8,38 @@
     // Overworld HUD drawing
     .org 0x02008f44
         b CustomSetBrightnessExit
-    // Update the timer every frame but only if overlay36 is fully loaded
-    .org 0x020036b4
+    // Trampoline to inject custom code to VBlank interrupt handler
+    .org 0x02003704
+        b 0x02094850
+    @vblank:
+    // Wait until overlay 36 is loaded and then an extra 16 frames to make sure
+    // we are safe to run our code
+    .org 0x02094850
+        stmdb sp!,{r0-r12,lr}
+        ldr r1, [@delay]
+        cmp r1, 0
+        bne @delay_not_done
+
+        bl WakeupThreads
+        b @exit
+
+    @delay_not_done:
         ldr r0, [@overlay36_loaded]
         ldr r0, [r0]
         cmp r0, 0
-        beq @continue
-        ldr r0, [@delay]
-        cmp r0, 0
-        subne r0, 1
-        str r0, [@delay]
-        bleq FrameRoutine
-        b @continue
+        subne r1, 1
+        str r1, [@delay]
+        cmp r1, 0
+        bleq InitThreads
+
+    @exit:
+        ldmia sp!,{r0-r12,lr}
+        stmdb sp!,{r3,lr}; // Run original instruction from the trampoline
+        b @vblank
     @overlay36_loaded:
         .word 0x020047BC
     @delay:
         .word 0x00000010
-    .org 0x020036ec
-    @continue:
     .org 0x020491bc
         bl HijackCalcChecksumAndSplit
     .org 0x0202b4a8

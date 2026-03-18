@@ -29,11 +29,6 @@ struct split current_split;
 
 bool prev_held_timer = false;
 
-// Return true if the play time has not advanced and we are not in the main menu
-bool IsLagging() {
-  return (curr_frame == last_frame) && !OverlayIsLoaded(OGROUP_OVERLAY_1);
-}
-
 // Return difference a - b in frames in play_time structs
 int IGTDifferenceFrames(struct play_time* a, struct play_time* b) {
   return (a->seconds - b->seconds) * 60 + (a->frames - b->frames);
@@ -96,9 +91,6 @@ void UpdateTimer(void) {
   // Optimization to avoid all these costly operations during lag
   last_frame = curr_frame;
   curr_frame = igt->frames;
-  if (IsLagging()) {
-    return;
-  }
 
   struct play_time* run_igt = IGTDifference(igt, &start_time);
   

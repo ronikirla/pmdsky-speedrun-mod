@@ -96,6 +96,7 @@ void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_of
     default:
       return;
   }
+  Debug_Print0("strncpy %s %s %d", loc, str, HUD_LEN);
   strncpy(loc, str, HUD_LEN);
   // Update the HUD slot that corresponds to the currently active mode
   switch(hud_display_mode) {
@@ -205,7 +206,8 @@ void HandleHUDToggle(void) {
       AssignHUDSlots();
     }
   } else {
-    prev_held_srh = false;
+    if (prev_held_srh)
+      prev_held_srh = false;
   }
 
   // Disallow turning off HUD when fixed RNG is on

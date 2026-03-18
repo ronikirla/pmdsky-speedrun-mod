@@ -27,3 +27,14 @@ ASSERT_SIZE(struct held_buttons, 2);
 void UnloadMenuState(void);
 
 void NamePrompt(int param_1, int param_2, int param_3);
+
+void OS_CreateThread(struct thread *thread,
+                     void (*func) (void*),
+                     void *arg,
+                     void *stack,
+                     uint32_t stackSize,
+                     uint32_t prio);
+
+void OS_WakeupThreadDirect(struct thread *thread);
+
+void OS_SleepThread(undefined* queue);
