@@ -74,8 +74,6 @@ Displays the current inputs using in-game icons.
 
 To obtain the base rom, apply the base patches in [/base_patches](/base_patches) to a clean EU rom first. The base rom includes the cutsceneless patch and some string changes, but technically the c-of-time patches should work on any rom that does not utilize the privately allocated `Overlay36.bin` area.
 
-The compiler arm-none-eabi-gcc version 13.2.Rel1 was used to build this. Newer versions seem to cause compilation errors.
-
 # c-of-time
 
 An environment for hooking and linking to Pokémon Mystery Dungeon: Explorers of Sky.
