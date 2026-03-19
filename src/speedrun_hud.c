@@ -6,6 +6,7 @@
 #include "speedrun_hud.h"
 #include "hud.h"
 #include "fixed_rng.h"
+#include "optimizations.h"
 
 #define TIMER_SLOT_MINIMAL HUD_SLOT_TOP_RIGHT
 #define TIMER_SLOT_MINIMAL_STRING_IDX 0
@@ -207,6 +208,11 @@ void HandleHUDToggle(void) {
   } else {
     if (prev_held_srh)
       prev_held_srh = false;
+  }
+
+  if (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT && OverlayIsLoaded(OGROUP_OVERLAY_1)) {
+    hud_display_mode = HUD_DISPLAY_MAXIMAL;
+    AssignHUDSlots();
   }
 
   // Disallow turning off HUD when fixed RNG is on

@@ -8,6 +8,7 @@
 #include "fps.h"
 #include "aps.h"
 #include "input_display.h"
+#include "optimizations.h"
 
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_1KB 1024
@@ -43,6 +44,7 @@ __attribute__((used)) void WakeupThreads(void) {
 void VBlankRoutine(void*) {
   while(true) {
     HandleHUDToggle();
+    HandleSpeedToggle();
     HandleTimerInput();
     UpdateTimer();
     UpdateFPS();

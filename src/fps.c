@@ -7,6 +7,7 @@
 #include "timer.h"
 #include "hud.h"
 #include "speedrun_hud.h"
+#include "optimizations.h"
 
 #define MONITORING_WINDOW 15
 #define MULTIPLIER_TO_FPS 4
@@ -22,7 +23,7 @@ void UpdateFPS(void) {
     char fps_string[HUD_LEN];
     // Don't print fps in main menu because it doesn't work when the timer isn't running
     if (OverlayIsLoaded(OGROUP_OVERLAY_1)) {
-      snprintf(fps_string, HUD_LEN, ""); 
+      snprintf(fps_string, HUD_LEN, GetOptimizationModeString()); 
     } else {
       snprintf(fps_string, HUD_LEN, "%d fps", fps); 
     }
