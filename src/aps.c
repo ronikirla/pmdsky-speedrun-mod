@@ -82,6 +82,9 @@ __attribute__((used)) void CustomMessageLogPauseLoop(undefined4 param_1, undefin
 }
 
 void UpdateAPS(void) {
+  if (IsLagging()) {
+    return;
+  }
   if (current_aps_split.remaining_frames > 0) {
     UpdateHUDString(SPEEDRUN_HUD_APS, current_aps_split.string, OFFSET);
     current_aps_split.remaining_frames--;

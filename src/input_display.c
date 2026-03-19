@@ -50,6 +50,9 @@ struct input_display_button {
 
 
 void UpdateInputDisplay(void) {
+  if (IsLagging()) {
+    return;
+  }
   struct held_buttons held_buttons;
   GetHeldButtons(0, (undefined*) &held_buttons);
   struct input_display_button buttons[NUM_BUTTONS] = {
@@ -123,6 +126,5 @@ void UpdateInputDisplay(void) {
       strcat(input_display_string, button_string);
     }
   }
-  Debug_Print0("%s", input_display_string);
   UpdateHUDString(SPEEDRUN_HUD_INPUT_DISPLAY, input_display_string, 0);
 }

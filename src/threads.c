@@ -12,7 +12,7 @@
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_1KB 1024
 
-#define VBLANK_ROUTINE_THREAD_PRIO 8
+#define VBLANK_ROUTINE_THREAD_PRIO 10
 #define DRAWING_THREAD_PRIO 30
 
 void VBlankRoutine(void*);
@@ -31,7 +31,6 @@ __attribute__((used)) void InitThreads(void) {
   OS_CreateThread(&drawing_thread, DrawingRoutine, NULL,
                   drawing_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
                   STACK_SIZE_1KB, DRAWING_THREAD_PRIO);
-
 }
 
 __attribute__((used)) void WakeupThreads(void) {

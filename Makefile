@@ -54,7 +54,7 @@ TARGET		:=	out
 BUILD		:=	build
 SOURCES		:=	src src/cot
 INCLUDES	:=	include pmdsky-debug/headers
-OPT_LEVEL := -O0
+OPT_LEVEL := -O2
 
 # Change to "RELEASE_CONFIG := -DNDEBUG" for release builds without asserts and logs
 RELEASE_CONFIG := -DDEBUG
