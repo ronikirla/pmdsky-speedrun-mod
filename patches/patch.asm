@@ -57,7 +57,7 @@
     .org 0x02037e24
         bl HijackTeamNamePromptConfirm
     // Optimization: only call SubstitutePlaceholderStringTags when actually logging a message.
-    // This skips a cart read which takes signficant time
+    // This skips a cart read which takes significant time
     .org 0x22ffc0c
         nop
     .org 0x22ffc6c
