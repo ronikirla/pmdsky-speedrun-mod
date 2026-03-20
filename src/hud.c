@@ -153,7 +153,7 @@ bool start_held_during_nonblocking_fade;
 
 void SubSetBrightnessNonblockingEntry(int brightness) {
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (undefined*) &held_buttons);
+  GetHeldButtons(0, (void*) &held_buttons);
   start_held_during_nonblocking_fade = brightness != 0 && held_buttons.start;
 }
 
@@ -268,7 +268,7 @@ __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brigh
   // Faded as in fully black or white
   bool faded = (brightness >= 0xFF || brightness <= -0xFF);
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (undefined*) &held_buttons);
+  GetHeldButtons(0, (void*) &held_buttons);
   // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
   bool start_held_during_fade = screen == SCREEN_MAIN && held_buttons.start && brightness != 0;
   start_held_during_nonblocking_fade = start_held_during_nonblocking_fade && OverlayIsLoaded(OGROUP_OVERLAY_11);

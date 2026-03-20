@@ -54,7 +54,7 @@ void UpdateInputDisplay(void) {
     return;
   }
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (undefined*) &held_buttons);
+  GetHeldButtons(0, (void*) &held_buttons);
   struct input_display_button buttons[NUM_BUTTONS] = {
     {
       .held = held_buttons.left,
