@@ -21,25 +21,28 @@ void HandleSpeedToggle(void) {
   if (IsLagging() || !OverlayIsLoaded(OGROUP_OVERLAY_1)) {
     return;
   }
+
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (undefined*) &held_buttons);
+  GetHeldButtons(0, (void*) &held_buttons);
+
+  // 0 = None, -1 = Left (Decrement), 1 = Right (Increment)
+  int direction = 0;
   if (held_buttons.start) {
-    if (held_buttons.left) {
-      if (prev_held_opt) {
-        return;
-      }
-      prev_held_opt = true;
-      optimization_mode = (optimization_mode + 3 - 1) % 3;
-      return;
-    } else if (held_buttons.right) {
-      if (prev_held_opt) {
-        return;
-      }
-      prev_held_opt = true;
-      optimization_mode = (optimization_mode + 1) % 3;
-      return;
-    }
+    if (held_buttons.left)      direction = -1;
+    else if (held_buttons.right) direction = 1;
   }
+
+  if (direction != 0) {
+    if (prev_held_opt) {
+      return; 
+    }
+
+    prev_held_opt = true;
+    optimization_mode = (optimization_mode + direction + 3) % 3;
+    
+    return;
+  }
+
   prev_held_opt = false;
 }
 
