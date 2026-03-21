@@ -38,18 +38,16 @@ int IGTDifferenceFrames(struct play_time* a, struct play_time* b) {
   return (a->seconds - b->seconds) * 60 + (a->frames - b->frames);
 }
 
-// Return difference a - b in play_time structs
-struct play_time* IGTDifference(struct play_time* a, struct play_time* b) {
-  struct play_time* diff = MemAlloc(sizeof(struct play_time), 0);
+// Give difference a - b in play_time structs
+void IGTDifference(struct play_time* r, struct play_time* a, struct play_time* b) {
   int seconds = a->seconds - b->seconds;
   int frames = a->frames - b->frames;
   if (frames < 0) {
     frames += 60;
     seconds -= 1;
   }
-  diff->seconds = seconds;
-  diff->frames = frames;
-  return diff;
+  r->seconds = seconds;
+  r->frames = frames;
 }
 
 __attribute__((used)) void ResetSplitRemainingFrames(void) {
@@ -99,10 +97,11 @@ void UpdateTimer(void) {
     return;
   }
 
-  struct play_time* run_igt = IGTDifference(igt, &start_time);
+  struct play_time run_igt;
+  IGTDifference(&run_igt, igt, &start_time);
   
-  uint8_t run_hundreths = hundredths_lookup[run_igt->frames];
-  uint64_t seconds_divided = _u32_div_f(run_igt->seconds, 60);
+  uint8_t run_hundreths = hundredths_lookup[run_igt.frames];
+  uint64_t seconds_divided = _u32_div_f(run_igt.seconds, 60);
   uint8_t run_seconds = seconds_divided >> 32;
   uint32_t run_minutes = seconds_divided & 0xFFFF;
   uint64_t minutes_divided = _u32_div_f(run_minutes, 60);
@@ -134,5 +133,4 @@ void UpdateTimer(void) {
     UpdateHUDString(SPEEDRUN_HUD_TIMER, time_string, x_offset);
   }
 
-  MemFree(run_igt);
 }
