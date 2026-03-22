@@ -26,3 +26,5 @@ OS_SleepThread = 0x02079c20;
 
 GetThreadPriority = 0x02079ea4;
 SetThreadPriority = 0x02079dfc;
+
+ReceiveMessageWithHighPrio = 0x2002a44;

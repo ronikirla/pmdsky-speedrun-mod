@@ -38,3 +38,5 @@ void OS_CreateThread(struct thread *thread,
 void OS_WakeupThreadDirect(struct thread *thread);
 
 void OS_SleepThread(undefined* queue);
+
+void ReceiveMessageWithHighPrio(void* param_1);

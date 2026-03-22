@@ -4,7 +4,8 @@
 .open "arm9.bin", arm9_start
     // Optimization: Skip waiting for VCount 0 at the start of a frame
     .org 0x0200345c
-        nop
+        b @VCount0WaitTrampoline
+    @vcount:
     // Overworld HUD drawing
     .org 0x02008f44
         b CustomSetBrightnessExit
@@ -40,6 +41,15 @@
         .word 0x020047BC
     @delay:
         .word 0x00000010
+    // Wait for Overlay36
+    .org 0x02094910
+    @VCount0WaitTrampoline:
+        stmdb sp!,{r7}
+        ldr r7, [@delay]
+        cmp r7, 0
+        ldmia sp!,{r7}
+        bleq SkipVCount0Wait
+        b @vcount
     .org 0x020491bc
         bl HijackCalcChecksumAndSplit
     .org 0x0202b4a8
@@ -56,22 +66,6 @@
         bl HijackDeleteWindowAndCheckOpenWindows
     .org 0x02037e24
         bl HijackTeamNamePromptConfirm
-    // Optimization: only call SubstitutePlaceholderStringTags when actually logging a message.
-    // This skips a cart read which takes significant time
-    .org 0x22ffc0c
-        nop
-    .org 0x22ffc6c
-        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
-    .org 0x22ffc80
-        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
-    .org 0x22ffc94
-        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
-    .org 0x22ffcc8
-        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
-    .org 0x22ffcdc
-        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
-    .org 0x22ffcfc
-        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
 
 //    // Generate custom missions
 //    .org 0x0205e958
@@ -125,8 +119,22 @@
         mov r2, r7
         bl CustomMessageLogPauseLoop
         ldmia sp!,{r3,r4,r5,r6,r7,pc}
-    .org 0x0230d118
-        //nop
+    // Optimization: only call SubstitutePlaceholderStringTags when actually logging a message.
+    // This skips a cart read which takes significant time
+    .org 0x22ffc0c
+        bl SkipAICardRead
+    .org 0x22ffc6c
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffc80
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffc94
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcc8
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcdc
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcfc
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
 .close
 
 .open "overlay11.bin", overlay11_start

@@ -9,13 +9,6 @@
 enum optimization_mode optimization_mode = OPTIMIZATION_MODE_DEFAULT;
 bool prev_held_opt = false;
 
-__attribute__((used)) void SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser(
-  struct entity* entity, int message_id
-) {
-  SubstitutePlaceholderStringTags(0, entity, 0);
-  LogMessageByIdWithPopupCheckUser(entity, message_id);
-}
-
 // In the main menu, let the player choose the level of optimization used during gameplay
 void HandleSpeedToggle(void) {
   if (IsLagging() || !OverlayIsLoaded(OGROUP_OVERLAY_1)) {
@@ -53,4 +46,30 @@ enum optimization_mode GetOptimizationMode() {
 char* GetOptimizationModeString(void) {
   char* optimization_mode_strings[] = {"Throttle mode", "Normal mode", "Fast mode"};
   return optimization_mode_strings[optimization_mode];
+}
+
+// If optimizations are enabled, skip waiting for VCount 0
+__attribute__((used)) void SkipVCount0Wait(void* param_1) {
+  if (optimization_mode == OPTIMIZATION_MODE_FAST)
+    return;
+  ReceiveMessageWithHighPrio(param_1);
+}
+
+// Unless optimizations are explicitly disabled, skip cart reads during AI calcs.
+// Note that even throttle mode gets optimized here, so we can manually add a
+// platform-independent amount of lag
+__attribute__((used)) void SkipAICardRead(int string_id, struct entity* entity) {
+  if (optimization_mode != OPTIMIZATION_MODE_DEFAULT)
+    return;
+  SubstitutePlaceholderStringTags(0, entity, 0);
+}
+
+__attribute__((used)) void SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser(
+  struct entity* entity, int message_id
+) {
+  // If we optimized the card read out, we need to still perform it when it's actually necessary
+  if (optimization_mode != OPTIMIZATION_MODE_DEFAULT) {
+    SubstitutePlaceholderStringTags(0, entity, 0);
+  }
+  LogMessageByIdWithPopupCheckUser(entity, message_id);
 }
