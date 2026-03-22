@@ -23,6 +23,7 @@ WINDOW_LIST = 0x022a921c;
 OS_CreateThread = 0x020798f8;
 OS_WakeupThreadDirect = 0x02079cd8;
 OS_SleepThread = 0x02079c20;
+OS_Sleep = 0x02079eac;
 
 GetThreadPriority = 0x02079ea4;
 SetThreadPriority = 0x02079dfc;

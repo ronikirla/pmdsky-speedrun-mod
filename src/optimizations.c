@@ -59,9 +59,17 @@ __attribute__((used)) void SkipVCount0Wait(void* param_1) {
 // Note that even throttle mode gets optimized here, so we can manually add a
 // platform-independent amount of lag
 __attribute__((used)) void SkipAICardRead(int string_id, struct entity* entity) {
-  if (optimization_mode != OPTIMIZATION_MODE_DEFAULT)
-    return;
-  SubstitutePlaceholderStringTags(0, entity, 0);
+  switch (optimization_mode) {
+    case OPTIMIZATION_MODE_THROTTLE:
+      OS_Sleep(3);
+      return;
+    case OPTIMIZATION_MODE_DEFAULT:
+      SubstitutePlaceholderStringTags(0, entity, 0);
+      return;
+    case OPTIMIZATION_MODE_FAST:
+      return;
+    default:
+  }
 }
 
 __attribute__((used)) void SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser(
