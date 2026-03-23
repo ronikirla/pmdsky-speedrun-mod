@@ -1,5 +1,9 @@
 #pragma once
 
+// Use fixed length strings on the stack for everything.
+// Memory inefficient and janky but avoids slow memory allocation.
+// Also the allocation crashes with threads so something needs to be done
+// if I ever want to use the heap.
 #define HUD_LEN 512
 #define HUD_SLOTS 3
 

@@ -5,6 +5,7 @@
 #include "custom_headers.h"
 #include "timer.h"
 #include "optimizations.h"
+#include "aps.h"
 
 enum optimization_mode optimization_mode = OPTIMIZATION_MODE_DEFAULT;
 bool prev_held_opt = false;
@@ -44,6 +45,8 @@ enum optimization_mode GetOptimizationMode() {
 }
 
 char* GetOptimizationModeString(void) {
+  if (GetCurrentAPSSplit()->remaining_frames > 0)
+    return "";
   char* optimization_mode_strings[] = {"Throttle mode", "Normal mode", "Fast mode"};
   return optimization_mode_strings[optimization_mode];
 }

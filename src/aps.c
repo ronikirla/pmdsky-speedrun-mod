@@ -7,6 +7,7 @@
 #include "custom_headers.h"
 #include "timer.h"
 #include "speedrun_hud.h"
+#include "aps.h"
 
 #define OFFSET 38
 
@@ -23,11 +24,6 @@ struct aps {
 
 struct aps aps;
 
-struct aps_split {
-  char string[HUD_LEN];
-  int remaining_frames;
-};
-
 struct aps_split current_aps_split;
 
 void ResetAPS(void) {
@@ -38,6 +34,10 @@ void ResetAPS(void) {
 
 void ResetAPSRemainingFrames(void) {
   current_aps_split.remaining_frames = SPLIT_SHOW_FRAMES;
+}
+
+struct aps_split* GetCurrentAPSSplit(void) {
+  return &current_aps_split;
 }
 
 // Count the action when SetLeaderAction() returns, i.e, when the player has inputted an action

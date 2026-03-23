@@ -11,38 +11,48 @@
 #include "optimizations.h"
 
 #define STACK_SIZE_4KB 1024 * 4
-#define STACK_SIZE_1KB 1024
+#define STACK_SIZE_2KB 1024 * 2
 
 #define VBLANK_ROUTINE_THREAD_PRIO 10
-#define DRAWING_THREAD_PRIO 30
+#define MAIN_ROUTINE_THREAD_PRIO 30
 
 void VBlankRoutine(void*);
-void DrawingRoutine(void*);
+void MainRoutine(void*);
 
 struct thread vblank_routine_thread;
-struct thread drawing_thread;
+struct thread main_routine_thread;
 
-uint64_t vblank_routine_thread_stack[STACK_SIZE_4KB / sizeof(uint64_t)];
-uint64_t drawing_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
+uint64_t vblank_routine_thread_stack[STACK_SIZE_2KB / sizeof(uint64_t)];
+uint64_t main_routine_thread_stack[STACK_SIZE_4KB / sizeof(uint64_t)];
 
 __attribute__((used)) void InitThreads(void) {
   OS_CreateThread(&vblank_routine_thread, VBlankRoutine, NULL,
-                  vblank_routine_thread_stack + STACK_SIZE_4KB / sizeof(uint64_t),
-                  STACK_SIZE_4KB, VBLANK_ROUTINE_THREAD_PRIO);
-  OS_CreateThread(&drawing_thread, DrawingRoutine, NULL,
-                  drawing_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
-                  STACK_SIZE_1KB, DRAWING_THREAD_PRIO);
+                  vblank_routine_thread_stack + STACK_SIZE_2KB / sizeof(uint64_t),
+                  STACK_SIZE_2KB, VBLANK_ROUTINE_THREAD_PRIO);
+  OS_CreateThread(&main_routine_thread, MainRoutine, NULL,
+                  main_routine_thread_stack + STACK_SIZE_4KB / sizeof(uint64_t),
+                  STACK_SIZE_4KB, MAIN_ROUTINE_THREAD_PRIO);
 }
 
 __attribute__((used)) void WakeupThreads(void) {
   OS_WakeupThreadDirect(&vblank_routine_thread);
-  OS_WakeupThreadDirect(&drawing_thread);
+  OS_WakeupThreadDirect(&main_routine_thread);
 }
 
 // High priority routine to perform every frame on VBlank.
-// Used to run the main logic of the mod
+// Currently just keeps track of the FPS.
+// Remember thread safety!
 void VBlankRoutine(void*) {
   while(true) {
+    CalculateFPS();
+    OS_SleepThread(NULL);
+  }
+}
+
+// Low priority routine to minimize the performance impact of the
+// mod by only running it while we would be sleeping
+void MainRoutine(void*) {
+  while (true) {
     HandleHUDToggle();
     HandleSpeedToggle();
     HandleTimerInput();
@@ -50,15 +60,6 @@ void VBlankRoutine(void*) {
     UpdateFPS();
     UpdateAPS();
     UpdateInputDisplay();
-    OS_SleepThread(NULL);
-  }
-}
-
-// Low priority routine to perform drawing of the HUD.
-// Minimize the performance impact of the mod by only running
-// it while we would be sleeping
-void DrawingRoutine(void*) {
-  while (true) {
     UpdateHUDSlots();
     OS_SleepThread(NULL);
   }
