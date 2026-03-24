@@ -23,10 +23,10 @@ uint8_t curr_frame;
 struct split {
   char string[HUD_LEN];
   int x_offset;
-  int remaining_frames;
+  int remaining_frames; // Shared resource
 };
 
-struct split current_split; // Shared resource
+struct split current_split;
 
 bool prev_held_timer = false;
 
@@ -123,12 +123,14 @@ void UpdateTimer(void) {
   char time_string[HUD_LEN];
   snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_hundreths);
 
-  if (current_split.remaining_frames == SPLIT_SHOW_FRAMES) {
+  // Make local copy to avoid data races
+  int current_split_remaining_frames_local = current_split.remaining_frames;
+  if (current_split_remaining_frames_local == SPLIT_SHOW_FRAMES) {
     snprintf(current_split.string, HUD_LEN, "%s%s", SPLIT_COLOR_TAG, time_string);
     current_split.x_offset = x_offset;
   }
 
-  if (current_split.remaining_frames > 0) {
+  if (current_split_remaining_frames_local > 0) {
     UpdateHUDString(SPEEDRUN_HUD_TIMER, current_split.string, current_split.x_offset);
     current_split.remaining_frames--;
   } else {

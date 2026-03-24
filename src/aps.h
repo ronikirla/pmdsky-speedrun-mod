@@ -7,7 +7,7 @@ void ResetAPSRemainingFrames(void);
 
 struct aps_split {
   char string[HUD_LEN];
-  int remaining_frames;
+  int remaining_frames; // Shared resource
 };
 
 struct aps_split* GetCurrentAPSSplit();

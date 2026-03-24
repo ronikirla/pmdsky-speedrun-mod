@@ -22,6 +22,8 @@
 
 #define WINDOW_LIST_LEN 20
 
+#define INCREASED_THREAD_PRIO 6
+
 struct hud_window_status {
   int window_id;
   char* strings[MAX_STRINGS];
@@ -75,9 +77,10 @@ struct hud_window_status hud_status[] = {
 // game's own callback system
 void HUDCallback(int window_id) {};
 
+bool draw_in_progress = false;
 // Refreshes the window with the current strings behind the string pointers
-// TODO: Race condition here. Switch the prio of the drawing thread when closing hud
 void UpdateHUD(enum hud_slot slot) {
+  draw_in_progress = true;
   int window_id = hud_status[slot].window_id;
   if (slot == HUD_SLOT_NULL || window_id == -1) {
     return;
@@ -93,6 +96,7 @@ void UpdateHUD(enum hud_slot slot) {
     }
   }
   UpdateWindow(window_id);
+  draw_in_progress = false;
 }
 
 // Set a string and x-offset pointers of a specified HUD slot
@@ -121,11 +125,19 @@ void CreateHUD(enum hud_slot slot) {
   UpdateHUD(slot);
 }
 
+extern struct thread main_routine_thread;
 // Close the text boxes of the HUD
 void CloseHUD(enum hud_slot slot) {
   if (hud_status[slot].window_id == -1) {
     return;
   }
+  // Avoid race condition: give top priority to let UpdateHUD finish if it is in progress
+  if (draw_in_progress) {
+    uint32_t regular_thread_prio = OS_GetThreadPriority(&main_routine_thread);
+    OS_SetThreadPriority(&main_routine_thread, INCREASED_THREAD_PRIO);
+    OS_SetThreadPriority(&main_routine_thread, regular_thread_prio);
+  }
+  
   CloseTextBox(hud_status[slot].window_id);
   hud_status[slot].window_id = -1;
 }

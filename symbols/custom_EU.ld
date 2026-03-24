@@ -24,6 +24,8 @@ OS_CreateThread = 0x020798f8;
 OS_WakeupThreadDirect = 0x02079cd8;
 OS_SleepThread = 0x02079c20;
 OS_Sleep = 0x02079eac;
+OS_SetThreadPriority = 0x02079dfc;
+OS_GetThreadPriority = 0x02079ea4;
 
 GetThreadPriority = 0x02079ea4;
 SetThreadPriority = 0x02079dfc;

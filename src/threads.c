@@ -41,7 +41,8 @@ __attribute__((used)) void WakeupThreads(void) {
 
 // High priority routine to perform every frame on VBlank.
 // Currently just keeps track of the FPS.
-// Remember thread safety!
+// Remember thread safety! When writing to a shared resource,
+// see what could happen in other threads
 void VBlankRoutine(void*) {
   while(true) {
     CalculateFPS();

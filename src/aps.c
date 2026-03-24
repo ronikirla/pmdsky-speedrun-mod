@@ -16,15 +16,15 @@
 
 struct aps {
   uint32_t idle_time;
-  uint32_t actions;
-  enum action prev_action;
+  uint32_t actions; // Shared resource
+  enum action prev_action; // Shared resource
   bool running_prevent_aps_count;
-  bool message_log_pause;
+  bool message_log_pause; // Shared resource
 };
 
-struct aps aps; // Shared resource
+struct aps aps;
 
-struct aps_split current_aps_split; // Shared resource
+struct aps_split current_aps_split;
 
 void ResetAPS(void) {
   aps.idle_time = 0;
@@ -87,6 +87,8 @@ void UpdateAPS(void) {
   }
   if (current_aps_split.remaining_frames > 0) {
     UpdateHUDString(SPEEDRUN_HUD_APS, current_aps_split.string, OFFSET);
+    // Technically race condition if remaining_frames gets set to 0 in between
+    // but in reality this just turns it negative, which is also less than or equal to 0
     current_aps_split.remaining_frames--;
   }
   if (!OverlayIsLoaded(OGROUP_OVERLAY_29)) {
@@ -102,6 +104,7 @@ void UpdateAPS(void) {
   int* menu_open_aps = (int*) 0x20afad0;
 
   char aps_color[HUD_LEN] = "";
+  // Note that we are making an assumption here that there is always enough time to run the routine while we are idle
   if (aps.message_log_pause) {
     aps.idle_time++;
     strncat(aps_color, PAUSE_SKIP_COLOR_TAG, HUD_LEN);
