@@ -69,13 +69,14 @@ struct hud_window_status hud_status[] = {
       .box_type = {BOX_TYPE_INVISIBLE}
     }
   }
-};
+}; // Shared resource
 
 // Leave this empty since we want to implement our own handling and not worry about the
 // game's own callback system
 void HUDCallback(int window_id) {};
 
 // Refreshes the window with the current strings behind the string pointers
+// TODO: Race condition here. Switch the prio of the drawing thread when closing hud
 void UpdateHUD(enum hud_slot slot) {
   int window_id = hud_status[slot].window_id;
   if (slot == HUD_SLOT_NULL || window_id == -1) {

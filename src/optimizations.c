@@ -7,7 +7,7 @@
 #include "optimizations.h"
 #include "aps.h"
 
-enum optimization_mode optimization_mode = OPTIMIZATION_MODE_DEFAULT;
+enum optimization_mode optimization_mode = OPTIMIZATION_MODE_DEFAULT; // Shared resource, but only gets written to in main menu
 bool prev_held_opt = false;
 
 // In the main menu, let the player choose the level of optimization used during gameplay
@@ -32,7 +32,7 @@ void HandleSpeedToggle(void) {
     }
 
     prev_held_opt = true;
-    optimization_mode = (optimization_mode + direction + 3) % 3;
+    optimization_mode = (optimization_mode + direction + 4) % 4;
     
     return;
   }
@@ -47,13 +47,13 @@ enum optimization_mode GetOptimizationMode() {
 char* GetOptimizationModeString(void) {
   if (GetCurrentAPSSplit()->remaining_frames > 0)
     return "";
-  char* optimization_mode_strings[] = {"Throttle mode", "Normal mode", "Fast mode"};
+  char* optimization_mode_strings[] = {"Throttle mode", "Normal mode", "Fast mode", "RNG viewer mode"};
   return optimization_mode_strings[optimization_mode];
 }
 
 // If optimizations are enabled, skip waiting for VCount 0
 __attribute__((used)) void SkipVCount0Wait(void* param_1) {
-  if (optimization_mode == OPTIMIZATION_MODE_FAST)
+  if (optimization_mode == OPTIMIZATION_MODE_FAST || optimization_mode == OPTIMIZATION_MODE_RNG_VIEWER)
     return;
   ReceiveMessageWithHighPrio(param_1);
 }

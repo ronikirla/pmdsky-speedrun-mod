@@ -7,6 +7,7 @@
 #include "speedrun_hud.h"
 #include "aps.h"
 #include "timer.h"
+#include "fps.h"
 
 #define CHAR_WIDTH 6
 #define DEFAULT_COL 10
@@ -25,7 +26,7 @@ struct split {
   int remaining_frames;
 };
 
-struct split current_split;
+struct split current_split; // Shared resource
 
 bool prev_held_timer = false;
 
@@ -53,6 +54,7 @@ void IGTDifference(struct play_time* r, struct play_time* a, struct play_time* b
 __attribute__((used)) void ResetSplitRemainingFrames(void) {
   current_split.remaining_frames = SPLIT_SHOW_FRAMES;
   ResetAPSRemainingFrames();
+  ResetDungeonRNGAdvances();
 }
 
 __attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int size) {

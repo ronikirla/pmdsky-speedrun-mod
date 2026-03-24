@@ -22,9 +22,9 @@ struct aps {
   bool message_log_pause;
 };
 
-struct aps aps;
+struct aps aps; // Shared resource
 
-struct aps_split current_aps_split;
+struct aps_split current_aps_split; // Shared resource
 
 void ResetAPS(void) {
   aps.idle_time = 0;

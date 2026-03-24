@@ -16,6 +16,7 @@ struct play_time prev_frames[MONITORING_WINDOW];
 bool is_prev_frames_filled = false; // Shared resource
 int idx = 0;
 int fps; // Shared resource
+int dungeon_rng_advances = 0;
 
 void UpdateFPS(void) {
   if (IsLagging()) {
@@ -28,8 +29,12 @@ void UpdateFPS(void) {
     if (OverlayIsLoaded(OGROUP_OVERLAY_1)) {
       snprintf(fps_string, HUD_LEN, GetOptimizationModeString()); 
     } else {
-      // fps: atomic access, thread safe
-      snprintf(fps_string, HUD_LEN, "%d fps", fps); 
+      if (GetOptimizationMode() == OPTIMIZATION_MODE_RNG_VIEWER && OverlayIsLoaded(OGROUP_OVERLAY_29)) {
+        snprintf(fps_string, HUD_LEN, "%d", dungeon_rng_advances); 
+      } else {
+        // fps: atomic access, thread safe
+        snprintf(fps_string, HUD_LEN, "%d fps", fps); 
+      }
     }
     UpdateHUDString(SPEEDRUN_HUD_FPS, fps_string, 2);
   }
@@ -44,4 +49,14 @@ void CalculateFPS(void) {
   }
   memcpy(&prev_frames[idx], igt, sizeof(*igt));
   idx = (idx + 1) % MONITORING_WINDOW;
+}
+
+// Practice feature for quicksave manips
+__attribute__((used)) void LogDungeonRand16Bit() {
+  dungeon_rng_advances++;
+  DungeonRand16Bit();
+}
+
+void ResetDungeonRNGAdvances(void) {
+  dungeon_rng_advances = 0;
 }

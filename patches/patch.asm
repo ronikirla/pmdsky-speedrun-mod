@@ -99,11 +99,6 @@
 .close
 
 .open "overlay29.bin", overlay29_start
-    // Dungeon rng
-    .org 0x022dfc08
-        // Instead of setting the 23-bits of the preseed we set it 
-        // fully to prevent the previous state from affecting anything.
-        bl HijackSetDungeonRngPreseedAndResetRngSeed
     // Dungeon mode exit
     .org 0x234cdc0
         bl ResetSplitRemainingFrames
@@ -119,6 +114,31 @@
         mov r2, r7
         bl CustomMessageLogPauseLoop
         ldmia sp!,{r3,r4,r5,r6,r7,pc}
+    // Dungeon rng
+    .org 0x022dfc08
+        // Instead of setting the 23-bits of the preseed we set it 
+        // fully to prevent the previous state from affecting anything.
+        bl HijackSetDungeonRngPreseedAndResetRngSeed
+    .org 0x22eb450
+        bl LogDungeonRand16Bit
+    .org 0x22eb488
+        bl LogDungeonRand16Bit
+    .org 0x22eb4ac
+        bl LogDungeonRand16Bit
+    .org 0x22eb4d8
+        bl LogDungeonRand16Bit
+    .org 0x22eb508
+        bl LogDungeonRand16Bit
+    .org 0x23439c8
+        bl LogDungeonRand16Bit
+    .org 0x2343a30
+        bl LogDungeonRand16Bit
+    .org 0x2345804
+        bl LogDungeonRand16Bit
+    .org 0x2347e44
+        bl LogDungeonRand16Bit
+    .org 0x022eb450
+        bl LogDungeonRand16Bit
     // Optimization: only call SubstitutePlaceholderStringTags when actually logging a message.
     // This skips a cart read which takes significant time
     .org 0x22ffc0c
