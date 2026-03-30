@@ -69,6 +69,7 @@ void HandleTimerInput(void) {
   if (held_buttons.start && held_buttons.l) {
     if (!prev_held_timer) {
       ResetAPS();
+      ResetDungeonRNGAdvances();
       prev_held_timer = true;
       current_split.remaining_frames = 0;
       if (file_timer) {
