@@ -22,6 +22,8 @@
 
 #define WINDOW_LIST_LEN 20
 
+#define INCREASED_THREAD_PRIO 6
+
 struct hud_window_status {
   int window_id;
   char* strings[MAX_STRINGS];
@@ -39,8 +41,8 @@ struct hud_window_status hud_status[] = {
       .y_offset = 0,
       .width = WINDOW_WIDTH_TOP,
       .height = WINDOW_HEIGHT,
-      .screen = SCREEN_SUB,
-      .box_type = BOX_TYPE_INVISIBLE
+      .screen = {SCREEN_SUB},
+      .box_type = {BOX_TYPE_INVISIBLE}
     }
   },
   {
@@ -52,8 +54,8 @@ struct hud_window_status hud_status[] = {
       .y_offset = 0,
       .width = WINDOW_WIDTH_TOP,
       .height = WINDOW_HEIGHT,
-      .screen = SCREEN_SUB,
-      .box_type = BOX_TYPE_INVISIBLE
+      .screen = {SCREEN_SUB},
+      .box_type = {BOX_TYPE_INVISIBLE}
     }
   },
   {
@@ -65,18 +67,20 @@ struct hud_window_status hud_status[] = {
       .y_offset = WINDOW_OFFSET_BOTTOM,
       .width = WINDOW_WIDTH_BOTTOM,
       .height = WINDOW_HEIGHT,
-      .screen = SCREEN_MAIN,
-      .box_type = BOX_TYPE_INVISIBLE
+      .screen = {SCREEN_MAIN},
+      .box_type = {BOX_TYPE_INVISIBLE}
     }
   }
-};
+}; // Shared resource
 
 // Leave this empty since we want to implement our own handling and not worry about the
 // game's own callback system
 void HUDCallback(int window_id) {};
 
+bool draw_in_progress = false;
 // Refreshes the window with the current strings behind the string pointers
 void UpdateHUD(enum hud_slot slot) {
+  draw_in_progress = true;
   int window_id = hud_status[slot].window_id;
   if (slot == HUD_SLOT_NULL || window_id == -1) {
     return;
@@ -92,6 +96,7 @@ void UpdateHUD(enum hud_slot slot) {
     }
   }
   UpdateWindow(window_id);
+  draw_in_progress = false;
 }
 
 // Set a string and x-offset pointers of a specified HUD slot
@@ -120,11 +125,19 @@ void CreateHUD(enum hud_slot slot) {
   UpdateHUD(slot);
 }
 
+extern struct thread main_routine_thread;
 // Close the text boxes of the HUD
 void CloseHUD(enum hud_slot slot) {
   if (hud_status[slot].window_id == -1) {
     return;
   }
+  // Avoid race condition: give top priority to let UpdateHUD finish if it is in progress
+  if (draw_in_progress) {
+    uint32_t regular_thread_prio = OS_GetThreadPriority(&main_routine_thread);
+    OS_SetThreadPriority(&main_routine_thread, INCREASED_THREAD_PRIO);
+    OS_SetThreadPriority(&main_routine_thread, regular_thread_prio);
+  }
+  
   CloseTextBox(hud_status[slot].window_id);
   hud_status[slot].window_id = -1;
 }
@@ -151,12 +164,16 @@ __attribute__((naked)) int HijackCloseSimpleMenuAndCreateHUD(void) {
 
 bool start_held_during_nonblocking_fade;
 
+void SubSetBrightnessNonblockingEntry(int brightness) {
+  struct held_buttons held_buttons;
+  GetHeldButtons(0, (void*) &held_buttons);
+  start_held_during_nonblocking_fade = brightness != 0 && held_buttons.start;
+}
+
 // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
 __attribute__((naked)) void HijackSetBrightnessNonblockingEntry(int brightness) {
   asm("stmdb sp!,{r0-r12,lr}");
-  struct held_buttons held_buttons;
-  GetHeldButtons(0, &held_buttons);
-  start_held_during_nonblocking_fade = brightness != 0 && held_buttons.start;
+  SubSetBrightnessNonblockingEntry(brightness);
   asm("ldmia sp!,{r0-r12,lr}");
   asm("mov r4,r0");
   asm("bx lr");
@@ -264,7 +281,7 @@ __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brigh
   // Faded as in fully black or white
   bool faded = (brightness >= 0xFF || brightness <= -0xFF);
   struct held_buttons held_buttons;
-  GetHeldButtons(0, &held_buttons);
+  GetHeldButtons(0, (void*) &held_buttons);
   // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
   bool start_held_during_fade = screen == SCREEN_MAIN && held_buttons.start && brightness != 0;
   start_held_during_nonblocking_fade = start_held_during_nonblocking_fade && OverlayIsLoaded(OGROUP_OVERLAY_11);

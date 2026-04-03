@@ -47,14 +47,14 @@ struct input_display_button {
   uint8_t x_offset;
 };
 
-char input_display_string[HUD_LEN];
+
 
 void UpdateInputDisplay(void) {
   if (IsLagging()) {
     return;
   }
   struct held_buttons held_buttons;
-  GetHeldButtons(0, &held_buttons);
+  GetHeldButtons(0, (void*) &held_buttons);
   struct input_display_button buttons[NUM_BUTTONS] = {
     {
       .held = held_buttons.left,
@@ -117,18 +117,14 @@ void UpdateInputDisplay(void) {
       .x_offset = OFFSET_SELECT
     }
   };
-
-  char new_input_display_string[HUD_LEN] = "";
+  char input_display_string[HUD_LEN] = "";
   for (int i = 0; i < NUM_BUTTONS; i++) {
     struct input_display_button button = buttons[i];
     if (button.held) {
       char button_string[HUD_LEN];
       snprintf(button_string, HUD_LEN, "[CLUM_SET:%d]%s", BASE_OFFSET + button.x_offset, button.tag);
-      strcat(new_input_display_string, button_string);
+      strcat(input_display_string, button_string);
     }
   }
-  if (strncmp(input_display_string, new_input_display_string, HUD_LEN)) {
-    strncpy(input_display_string, new_input_display_string, HUD_LEN);
-    UpdateHUDString(SPEEDRUN_HUD_INPUT_DISPLAY, input_display_string, 0);
-  }
+  UpdateHUDString(SPEEDRUN_HUD_INPUT_DISPLAY, input_display_string, 0);
 }

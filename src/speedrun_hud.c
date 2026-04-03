@@ -6,6 +6,7 @@
 #include "speedrun_hud.h"
 #include "hud.h"
 #include "fixed_rng.h"
+#include "optimizations.h"
 
 #define TIMER_SLOT_MINIMAL HUD_SLOT_TOP_RIGHT
 #define TIMER_SLOT_MINIMAL_STRING_IDX 0
@@ -185,7 +186,7 @@ void AssignHUDSlots(void) {
 // Read inputs to switch between HUD modes
 void HandleHUDToggle(void) {
   struct held_buttons held_buttons;
-  GetHeldButtons(0, &held_buttons);
+  GetHeldButtons(0, (void*) &held_buttons);
   if (held_buttons.start && held_buttons.select) {
     if (!prev_held_srh) {
       prev_held_srh = true;
@@ -205,7 +206,13 @@ void HandleHUDToggle(void) {
       AssignHUDSlots();
     }
   } else {
-    prev_held_srh = false;
+    if (prev_held_srh)
+      prev_held_srh = false;
+  }
+
+  if (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT && OverlayIsLoaded(OGROUP_OVERLAY_1)) {
+    hud_display_mode = HUD_DISPLAY_MAXIMAL;
+    AssignHUDSlots();
   }
 
   // Disallow turning off HUD when fixed RNG is on

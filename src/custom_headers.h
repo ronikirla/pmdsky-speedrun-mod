@@ -23,3 +23,21 @@ struct held_buttons {
     uint8_t _padding : 4;
 };
 ASSERT_SIZE(struct held_buttons, 2);
+
+void UnloadMenuState(void);
+
+void NamePrompt(int param_1, int param_2, int param_3);
+
+void OS_CreateThread(struct thread *thread,
+                     void (*func) (void*),
+                     void *arg,
+                     void *stack,
+                     uint32_t stackSize,
+                     uint32_t prio);
+void OS_WakeupThreadDirect(struct thread *thread);
+void OS_SleepThread(undefined* queue);
+void OS_SetThreadPriority(struct thread* thread, uint32_t prio);
+uint32_t OS_GetThreadPriority(struct thread* thread);
+void OS_Sleep(uint32_t msec);
+
+void ReceiveMessageWithHighPrio(void* param_1);

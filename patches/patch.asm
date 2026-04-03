@@ -2,27 +2,54 @@
 .include "symbols.asm"
 
 .open "arm9.bin", arm9_start
+    // Optimization: Skip waiting for VCount 0 at the start of a frame
+    .org 0x0200345c
+        b @VCount0WaitTrampoline
+    @vcount:
     // Overworld HUD drawing
     .org 0x02008f44
         b CustomSetBrightnessExit
-    // Update the timer every frame but only if overlay36 is fully loaded
-    .org 0x020036b4
+    // Trampoline to inject custom code to VBlank interrupt handler
+    .org 0x02003704
+        b 0x02094850
+    @vblank:
+    // Wait until overlay 36 is loaded and then an extra 16 frames to make sure
+    // we are safe to run our code
+    .org 0x02094850
+        stmdb sp!,{r0-r12,lr}
+        ldr r1, [@delay]
+        cmp r1, 0
+        bne @delay_not_done
+
+        bl WakeupThreads
+        b @exit
+
+    @delay_not_done:
         ldr r0, [@overlay36_loaded]
         ldr r0, [r0]
         cmp r0, 0
-        beq @continue
-        ldr r0, [@delay]
-        cmp r0, 0
-        subne r0, 1
-        str r0, [@delay]
-        bleq FrameRoutine
-        b @continue
+        subne r1, 1
+        str r1, [@delay]
+        cmp r1, 0
+        bleq InitThreads
+
+    @exit:
+        ldmia sp!,{r0-r12,lr}
+        stmdb sp!,{r3,lr}; // Run original instruction from the trampoline
+        b @vblank
     @overlay36_loaded:
         .word 0x020047BC
     @delay:
         .word 0x00000010
-    .org 0x020036ec
-    @continue:
+    // Wait for Overlay36
+    .org 0x02094910
+    @VCount0WaitTrampoline:
+        stmdb sp!,{r7}
+        ldr r7, [@delay]
+        cmp r7, 0
+        ldmia sp!,{r7}
+        bleq SkipVCount0Wait
+        b @vcount
     .org 0x020491bc
         bl HijackCalcChecksumAndSplit
     .org 0x0202b4a8
@@ -39,6 +66,7 @@
         bl HijackDeleteWindowAndCheckOpenWindows
     .org 0x02037e24
         bl HijackTeamNamePromptConfirm
+
 //    // Generate custom missions
 //    .org 0x0205e958
 //        // Set main board to spawn 8 missions
@@ -71,11 +99,6 @@
 .close
 
 .open "overlay29.bin", overlay29_start
-    // Dungeon rng
-    .org 0x022dfc08
-        // Instead of setting the 23-bits of the preseed we set it 
-        // fully to prevent the previous state from affecting anything.
-        bl HijackSetDungeonRngPreseedAndResetRngSeed
     // Dungeon mode exit
     .org 0x234cdc0
         bl ResetSplitRemainingFrames
@@ -91,8 +114,47 @@
         mov r2, r7
         bl CustomMessageLogPauseLoop
         ldmia sp!,{r3,r4,r5,r6,r7,pc}
-    .org 0x0230d118
-        //nop
+    // Dungeon rng
+    .org 0x022dfc08
+        // Instead of setting the 23-bits of the preseed we set it 
+        // fully to prevent the previous state from affecting anything.
+        bl HijackSetDungeonRngPreseedAndResetRngSeed
+    .org 0x22eb450
+        bl LogDungeonRand16Bit
+    .org 0x22eb488
+        bl LogDungeonRand16Bit
+    .org 0x22eb4ac
+        bl LogDungeonRand16Bit
+    .org 0x22eb4d8
+        bl LogDungeonRand16Bit
+    .org 0x22eb508
+        bl LogDungeonRand16Bit
+    .org 0x23439c8
+        bl LogDungeonRand16Bit
+    .org 0x2343a30
+        bl LogDungeonRand16Bit
+    .org 0x2345804
+        bl LogDungeonRand16Bit
+    .org 0x2347e44
+        bl LogDungeonRand16Bit
+    .org 0x022eb450
+        bl LogDungeonRand16Bit
+    // Optimization: only call SubstitutePlaceholderStringTags when actually logging a message.
+    // This skips a cart read which takes significant time
+    .org 0x22ffc0c
+        bl SkipAICardRead
+    .org 0x22ffc6c
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffc80
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffc94
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcc8
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcdc
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
+    .org 0x22ffcfc
+        bl SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser
 .close
 
 .open "overlay11.bin", overlay11_start

@@ -58,6 +58,26 @@ dungeon.
 
 Displays the current inputs using in-game icons.
 
+## Gameplay modes
+
+The hack lets you switch between different gameplay modes in the title screen. This is done using **start+left/right**. The main purpose of these is to let runners on DS flashcards properly emulate the dashing speed for practice as well as letting runners racing on various platforms have an equivalent gameplay experience.
+
+### Throttle mode
+
+This emulates the dashing speed of real hardware. It replaces game card reads during AI calculation with fixed duration sleeps.
+
+### Normal mode
+
+Unchanged.
+
+### Fast mode
+
+This optimizes the performance of the game by letting it utilize 100% of the frame time for calculations as opposed to 75% (time between VCount 0 and VBlank). Additionally, it removes unnecessary game card reads during AI calculation. As a result, it makes the game run pretty much like on Wii U Virtual Console, where it drops no frames during gameplay until very high enemy counts.
+
+### RNG viewer mode
+
+This otherwise acts like fast mode, but it replaces the FPS counter during gameplay with an RNG advance counter. Can be reset with **start+L**. This is useful for routing and practicing RNG manipulations.
+
 ## Known issues
 
 - The text placement has been optimized so that it does not collide with other UI elements, but due to the janky window system, it is not always possible to do perfectly. There are some instances of text clipping out, such as the top screen text getting partly covered by the top screen map in dungeons. However, this top screen setting  is suboptimal for speedruns either way due to losing time to loads, so it is not a high priorty.
@@ -74,8 +94,6 @@ Displays the current inputs using in-game icons.
 
 To obtain the base rom, apply the base patches in [/base_patches](/base_patches) to a clean EU rom first. The base rom includes the cutsceneless patch and some string changes, but technically the c-of-time patches should work on any rom that does not utilize the privately allocated `Overlay36.bin` area.
 
-The compiler arm-none-eabi-gcc version 13.2.Rel1 was used to build this. Newer versions seem to cause compilation errors.
-
 # c-of-time
 
 An environment for hooking and linking to Pokémon Mystery Dungeon: Explorers of Sky.
@@ -83,7 +101,7 @@ An environment for hooking and linking to Pokémon Mystery Dungeon: Explorers of
 ## Credits
 This project is loosely based on [EternalCode's template](https://github.com/EternalCode/Empty-Template). The build configuration is based on scripts provided by [devkitPro](https://devkitpro.org). The patch format was inspired by [Starlight](https://github.com/shadowninja108/Starlight).
 
-Special thanks to [UsernameFodder](https://github.com/UsernameFodder) for the [pmdsky-debug](https://github.com/UsernameFodder/pmdsky-debug) project, [End45](https://github.com/End45) for the *ExtraSpace* patch and irdkwia for their research on item, move and special process effects.
+Special thanks to [UsernameFodder](https://github.com/UsernameFodder) for the [pmdsky-debug](https://github.com/UsernameFodder/pmdsky-debug) project, [Frostbyte](https://github.com/Frostbyte0x70) for the *ExtraSpace* patch and [irdkwia](https://github.com/irdkwia) for their research on item, move and special process effects.
 
 ## Rust subsystem
 **NOTE: The `main` branch does currently not contain the Rust subsystem anymore**, as it's support
