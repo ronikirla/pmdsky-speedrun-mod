@@ -27,7 +27,7 @@ struct aps aps;
 struct aps_split current_aps_split;
 
 void ResetAPS(void) {
-  aps.idle_time = 0;
+  aps.idle_time = 1;
   aps.actions = 0;
   current_aps_split.remaining_frames = 0;
 }
