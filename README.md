@@ -58,6 +58,26 @@ dungeon.
 
 Displays the current inputs using in-game icons.
 
+## Gameplay modes
+
+The hack lets you switch between different gameplay modes in the title screen. This is done using **start+left/right**. The main purpose of these is to let runners on DS flashcards properly emulate the dashing speed for practice as well as letting runners racing on various platforms have an equivalent gameplay experience.
+
+### Throttle mode
+
+This emulates the dashing speed of real hardware. It replaces game card reads during AI calculation with fixed duration sleeps.
+
+### Normal mode
+
+Unchanged.
+
+### Fast mode
+
+This optimizes the performance of the game by letting it utilize 100% of the frame time for calculations as opposed to 75% (time between VCount 0 and VBlank). Additionally, it removes unnecessary game card reads during AI calculation. As a result, it makes the game run pretty much like on Wii U Virtual Console, where it drops no frames during gameplay until very high enemy counts.
+
+### RNG viewer mode
+
+This otherwise acts like fast mode, but it replaces the FPS counter during gameplay with an RNG advance counter. Can be reset with **start+L**. This is useful for routing and practicing RNG manipulations.
+
 ## Known issues
 
 - The text placement has been optimized so that it does not collide with other UI elements, but due to the janky window system, it is not always possible to do perfectly. There are some instances of text clipping out, such as the top screen text getting partly covered by the top screen map in dungeons. However, this top screen setting  is suboptimal for speedruns either way due to losing time to loads, so it is not a high priorty.
