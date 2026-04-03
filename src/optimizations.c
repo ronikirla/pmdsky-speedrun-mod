@@ -64,7 +64,7 @@ __attribute__((used)) void SkipVCount0Wait(void* param_1) {
 __attribute__((used)) void SkipAICardRead(int string_id, struct entity* entity) {
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_THROTTLE:
-      OS_Sleep(3);
+      OS_Sleep(1);
       return;
     case OPTIMIZATION_MODE_DEFAULT:
       SubstitutePlaceholderStringTags(0, entity, 0);
