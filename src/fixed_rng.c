@@ -62,6 +62,7 @@ void ResetRngSeed() {
   uint16_t seed = base_rng_seed ^ scenario ^ (level << 5) ^ (calls_per_scenario << 12);
   //Debug_Print0("seed: %x\n", seed);
   SetRngSeed(seed);
+  Rand16Bit();
 }
 
 // Hijacking functions that can be jumped into from ASM.
