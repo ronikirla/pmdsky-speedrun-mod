@@ -210,7 +210,7 @@ void HandleHUDToggle(void) {
       prev_held_srh = false;
   }
 
-  if (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT && OverlayIsLoaded(OGROUP_OVERLAY_1)) {
+  if (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT && OverlayIsLoaded(OGROUP_OVERLAY_1) && hud_display_mode != HUD_DISPLAY_MAXIMAL) {
     hud_display_mode = HUD_DISPLAY_MAXIMAL;
     AssignHUDSlots();
   }
