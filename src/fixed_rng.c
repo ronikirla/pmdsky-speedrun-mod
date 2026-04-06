@@ -80,6 +80,11 @@ __attribute__((used)) void HijackGenerateKecleonItems1AndResetRngSeed(enum kecle
   GenerateKecleonItems1(kecleon_shop_version);
 }
 
+__attribute__((used)) void HijackGenerateDailyMissionsAndResetRngSeed(void) {
+  ResetRngSeed();
+  GenerateDailyMissions();
+}
+
 __attribute__((used)) uint32_t HijackRandIntAndResetRngSeed(int high) {
   ResetRngSeed();
   return RandInt(high);

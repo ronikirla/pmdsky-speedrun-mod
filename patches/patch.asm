@@ -161,8 +161,9 @@
     // Main story shop
     .org 0x022e9de8
         // Reset rng before generating Kecleon items.
-        // Missions are generated immediately after so this resets that too.
         bl HijackGenerateKecleonItems1AndResetRngSeed
+    .org 0x022e9df4
+        bl HijackGenerateDailyMissionsAndResetRngSeed
     // Special episode shop
     .org 0x234d2fc
         bl HijackGenerateKecleonItems1AndResetRngSeed
