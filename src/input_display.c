@@ -5,7 +5,7 @@
 #include "custom_headers.h"
 #include "hud.h"
 #include "speedrun_hud.h"
-#include "timer.h"
+#include "fps.h"
 
 #define NUM_BUTTONS 12
 #define STR_TAG_LEN 10

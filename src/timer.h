@@ -8,6 +8,4 @@ int IGTDifferenceFrames(struct play_time* a, struct play_time* b);
 
 void HandleTimerInput(void);
 
-bool IsLagging();
-
 void UpdateTimer(void);

@@ -17,6 +17,13 @@ bool is_prev_frames_filled = false; // Shared resource
 int idx = 0;
 int fps; // Shared resource
 int dungeon_rng_advances = 0;
+int lag_frames = 0;
+uint8_t last_frame;
+uint8_t curr_frame;
+
+bool IsLagging() {
+  return (curr_frame == last_frame) && !OverlayIsLoaded(OGROUP_OVERLAY_1);
+}
 
 void UpdateFPS(void) {
   if (IsLagging()) {
@@ -33,7 +40,11 @@ void UpdateFPS(void) {
         snprintf(fps_string, HUD_LEN, "%d", dungeon_rng_advances); 
       } else {
         // fps: atomic access, thread safe
+        #ifdef LAG_TEST
+        snprintf(fps_string, HUD_LEN, "%d", lag_frames); 
+        #else
         snprintf(fps_string, HUD_LEN, "%d fps", fps); 
+        #endif
       }
     }
     UpdateHUDString(SPEEDRUN_HUD_FPS, fps_string, 2);
@@ -42,6 +53,11 @@ void UpdateFPS(void) {
 
 void CalculateFPS(void) {
   struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
+  last_frame = curr_frame;
+  curr_frame = igt->frames;
+  if (IsLagging()) {
+    lag_frames++;
+  }
   if (is_prev_frames_filled) {
     fps = IGTDifferenceFrames(igt, &prev_frames[idx]) * MULTIPLIER_TO_FPS;
   } else {
@@ -59,4 +75,5 @@ __attribute__((used)) void LogDungeonRand16Bit() {
 
 void ResetDungeonRNGAdvances(void) {
   dungeon_rng_advances = 0;
+  lag_frames = 0;
 }

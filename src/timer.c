@@ -17,9 +17,6 @@ uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 2
 bool file_timer = true;
 struct play_time start_time;
 
-uint8_t last_frame;
-uint8_t curr_frame;
-
 struct split {
   char string[HUD_LEN];
   int x_offset;
@@ -29,10 +26,6 @@ struct split {
 struct split current_split;
 
 bool prev_held_timer = false;
-
-bool IsLagging() {
-  return (curr_frame == last_frame) && !OverlayIsLoaded(OGROUP_OVERLAY_1);
-}
 
 // Return difference a - b in frames in play_time structs
 int IGTDifferenceFrames(struct play_time* a, struct play_time* b) {
@@ -94,8 +87,6 @@ void HandleTimerInput(void) {
 void UpdateTimer(void) {
   struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
   // Optimization to avoid all these costly operations during lag
-  last_frame = curr_frame;
-  curr_frame = igt->frames;
   if (IsLagging()) {
     return;
   }
@@ -122,7 +113,11 @@ void UpdateTimer(void) {
     }
 
   char time_string[HUD_LEN];
+  #ifdef LAG_TEST
+  snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_igt.frames);
+  #else
   snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_hundreths);
+  #endif
 
   // Make local copy to avoid data races
   int current_split_remaining_frames_local = current_split.remaining_frames;

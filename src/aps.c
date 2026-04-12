@@ -8,6 +8,7 @@
 #include "timer.h"
 #include "speedrun_hud.h"
 #include "aps.h"
+#include "fps.h"
 
 #define OFFSET 38
 
