@@ -2,17 +2,18 @@
 .include "symbols.asm"
 
 .open "arm9.bin", arm9_start
-    // Optimization: Skip waiting for VCount 0 at the start of a frame
-    .org 0x0200345c
-        b @VCount0WaitTrampoline
-    @vcount:
-    // Overworld HUD drawing
-    .org 0x02008f44
-        b CustomSetBrightnessExit
-    // Trampoline to inject custom code to VBlank interrupt handler
-    .org 0x02003704
+    // Remove the busy sleep from G3X_Reset since we handle the frame synchronization separately
+    // in a way that lets us sometimes skip the wait to squeeze more processing time.
+    .org 0x02077c78
+        nop
+    // Trampoline for waiting until overlay 36 is loaded before running our custom version of WaitTillVBlank
+    .org 0x02003a40
+        b @DelayWaitTillVBlankTrampoline
+    @WaitTillVBlank:
+    // Trampoline to inject custom code to VCount 0 alarm interrupt handler
+    .org 0x02003764
         b 0x02094850
-    @vblank:
+    @vcount0:
     // Wait until overlay 36 is loaded and then an extra 16 frames to make sure
     // we are safe to run our code
     .org 0x02094850
@@ -35,21 +36,26 @@
 
     @exit:
         ldmia sp!,{r0-r12,lr}
-        stmdb sp!,{r3,lr}; // Run original instruction from the trampoline
-        b @vblank
+        add r2, r2, 1 // Run original instruction from the trampoline
+        b @vcount0
     @overlay36_loaded:
         .word 0x020047BC
     @delay:
         .word 0x00000010
     // Wait for Overlay36
     .org 0x02094910
-    @VCount0WaitTrampoline:
+    @DelayWaitTillVBlankTrampoline:
         stmdb sp!,{r7}
         ldr r7, [@delay]
         cmp r7, 0
         ldmia sp!,{r7}
-        bleq SkipVCount0Wait
-        b @vcount
+        beq CustomWaitTillVBlank
+        stmdb sp!,{r4,lr} // Original instruction
+        b @WaitTillVBlank
+        
+    // Overworld HUD drawing
+    .org 0x02008f44
+        b CustomSetBrightnessExit
     .org 0x020491bc
         bl HijackCalcChecksumAndSplit
     .org 0x0202b4a8

@@ -30,4 +30,9 @@ OS_GetThreadPriority = 0x02079ea4;
 GetThreadPriority = 0x02079ea4;
 SetThreadPriority = 0x02079dfc;
 
-ReceiveMessageWithHighPrio = 0x2002a44;
+ReceiveMessageWithHighPrio = 0x02002a44;
+
+CallsChangeThreadPriority = 0x02002628;
+
+DAT_02003aac = 0x02003aac;
+FUN_0200265c = 0x0200265c;

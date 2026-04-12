@@ -1,3 +1,5 @@
+#pragma once
+
 // These are static addresses for the screen_fade structs governing the top screen
 /*enum fade_status_pointer {
     TOP_SCREEN_GROUND = 0x2389B58,
@@ -41,3 +43,11 @@ uint32_t OS_GetThreadPriority(struct thread* thread);
 void OS_Sleep(uint32_t msec);
 
 void ReceiveMessageWithHighPrio(void* param_1);
+
+void CallsChangeThreadPriority(void* param_1, int param_2);
+void FUN_0200265c(void* param_1);
+
+// From the SDK
+static inline bool GX_IsVBlank(void) {
+  return (*(uint16_t*) (0x04000000 + 0x004)) & 0x0001;
+}

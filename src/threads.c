@@ -16,7 +16,7 @@
 #define VBLANK_ROUTINE_THREAD_PRIO 10
 #define MAIN_ROUTINE_THREAD_PRIO 30
 
-void VBlankRoutine(void*);
+void VCount0Routine(void*);
 void MainRoutine(void*);
 
 struct thread vblank_routine_thread;
@@ -26,7 +26,7 @@ uint64_t vblank_routine_thread_stack[STACK_SIZE_2KB / sizeof(uint64_t)];
 uint64_t main_routine_thread_stack[STACK_SIZE_4KB / sizeof(uint64_t)];
 
 __attribute__((used)) void InitThreads(void) {
-  OS_CreateThread(&vblank_routine_thread, VBlankRoutine, NULL,
+  OS_CreateThread(&vblank_routine_thread, VCount0Routine, NULL,
                   vblank_routine_thread_stack + STACK_SIZE_2KB / sizeof(uint64_t),
                   STACK_SIZE_2KB, VBLANK_ROUTINE_THREAD_PRIO);
   OS_CreateThread(&main_routine_thread, MainRoutine, NULL,
@@ -39,11 +39,11 @@ __attribute__((used)) void WakeupThreads(void) {
   OS_WakeupThreadDirect(&main_routine_thread);
 }
 
-// High priority routine to perform every frame on VBlank.
+// High priority routine to perform every frame on VCount 0.
 // Currently just keeps track of the FPS.
 // Remember thread safety! When writing to a shared resource,
 // see what could happen in other threads
-void VBlankRoutine(void*) {
+void VCount0Routine(void*) {
   while(true) {
     CalculateFPS();
     OS_SleepThread(NULL);
