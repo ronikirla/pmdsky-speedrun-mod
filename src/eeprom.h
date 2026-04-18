@@ -10,3 +10,5 @@ struct eeprom_timer {
   uint8_t index;
   struct play_time_no_padding redundant_timers[2];
 };
+
+void SaveIGT(void);

@@ -9,6 +9,7 @@
 #include "aps.h"
 #include "input_display.h"
 #include "optimizations.h"
+#include "eeprom.h"
 
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_2KB 1024 * 2
@@ -54,8 +55,7 @@ void VCount0Routine(void*) {
 // mod by only running it while we would be sleeping
 void MainRoutine(void*) {
   while (true) {
-    char asd[] = "asdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasaasdasdasdadsdasdaddsasdasa";
-    Card_WriteAndVerifyEeprom(0xb65c, asd, 10);
+    SaveIGT();
     HandleHUDToggle();
     HandleSpeedToggle();
     HandleTimerInput();

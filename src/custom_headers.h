@@ -1,4 +1,6 @@
 #pragma once
+#include <pmdsky.h>
+#include <cot.h>
 
 // These are static addresses for the screen_fade structs governing the top screen
 /*enum fade_status_pointer {
@@ -65,4 +67,14 @@ static inline bool Cardi_ProgramAndVerifyBackup(uint32_t dst, const void *src, u
 
 static inline bool Card_WriteAndVerifyEeprom(uint32_t dst, const void *src, uint32_t len) {
     return Cardi_ProgramAndVerifyBackup(dst, src, len, NULL, NULL, false);
+}
+
+static inline bool Cardi_ReadBackup(uint32_t src, void* dst, uint32_t len, void* callback, void* arg, bool is_async) {
+    return Cardi_RequestStreamCommand((uint32_t)src, (uint32_t)dst, len,
+                                      callback, arg, is_async,
+                                      6, 1, 0);
+}
+
+static inline bool Card_ReadEeprom(uint32_t src, void* dst, uint32_t len) {
+    return Cardi_ReadBackup(src, dst, len, NULL, NULL, false);
 }
