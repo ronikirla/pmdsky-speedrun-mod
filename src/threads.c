@@ -55,7 +55,6 @@ void VCount0Routine(void*) {
 // mod by only running it while we would be sleeping
 void MainRoutine(void*) {
   while (true) {
-    SaveIGT();
     HandleHUDToggle();
     HandleSpeedToggle();
     HandleTimerInput();
@@ -64,6 +63,7 @@ void MainRoutine(void*) {
     UpdateAPS();
     UpdateInputDisplay();
     UpdateHUDSlots();
+    SaveIGT();
     OS_SleepThread(NULL);
   }
 }
