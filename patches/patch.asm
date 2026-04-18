@@ -2,6 +2,8 @@
 .include "symbols.asm"
 
 .open "arm9.bin", arm9_start
+    .org 0x020662b8
+        bl HijackNoteLoadBaseAndLoadIGT
     // Remove the busy sleep from G3X_Reset since we handle the frame synchronization separately
     // in a way that lets us sometimes skip the wait to squeeze more processing time.
     .org 0x02077c78
