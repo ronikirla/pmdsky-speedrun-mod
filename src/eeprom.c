@@ -46,7 +46,7 @@ void LoadIGT(void) {
     // Read index
     Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS, &eeprom_timer.index, 1);
     // Read IGT
-    int eeprom_offset = eeprom_timer.index * 0x6;
+    int eeprom_offset = 0x1 + eeprom_timer.index * 0x5;
     Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS + eeprom_offset, &eeprom_timer.redundant_timers[eeprom_timer.index], 5);
     Debug_Print0("LOAD index: %d\nseconds 0: %d, frames 0: %d\nseconds 1: %d, frames 1: %d", eeprom_timer.index, eeprom_timer.redundant_timers[0].seconds, eeprom_timer.redundant_timers[0].frames, eeprom_timer.redundant_timers[1].seconds, eeprom_timer.redundant_timers[1].frames);
 
