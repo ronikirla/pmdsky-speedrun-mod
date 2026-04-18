@@ -51,3 +51,18 @@ void FUN_0200265c(void* param_1);
 static inline bool GX_IsVBlank(void) {
   return (*(uint16_t*) (0x04000000 + 0x004)) & 0x0001;
 }
+
+bool Cardi_RequestStreamCommand(uint32_t src, uint32_t dst, uint32_t len,
+                                   void* callback, void *arg, bool is_async,
+                                   uint32_t req_type, int req_retry, uint32_t req_mode);
+
+static inline bool Cardi_ProgramAndVerifyBackup(uint32_t dst, const void *src, uint32_t len,
+                                             void* callback, void *arg, bool is_async)
+{
+    return Cardi_RequestStreamCommand((uint32_t)src, (uint32_t)dst, len, callback, arg, is_async,
+                                      8, 10, 2);
+}
+
+static inline bool Card_WriteAndVerifyEeprom(uint32_t dst, const void *src, uint32_t len) {
+    return Cardi_ProgramAndVerifyBackup(dst, src, len, NULL, NULL, false);
+}

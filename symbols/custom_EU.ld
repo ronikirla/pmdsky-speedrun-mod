@@ -36,3 +36,5 @@ CallsChangeThreadPriority = 0x02002628;
 
 DAT_02003aac = 0x02003aac;
 FUN_0200265c = 0x0200265c;
+
+Cardi_RequestStreamCommand = 0x02083db0;
