@@ -110,6 +110,7 @@ __attribute__((used)) void SubstitutePlaceholderStringTagsAndLogMessageByIdWithP
 ) {
   // If we optimized the card read out, we need to still perform it when it's actually necessary
   switch(optimization_mode) {
+    case OPTIMIZATION_MODE_THROTTLE:
     case OPTIMIZATION_MODE_FAST:
     case OPTIMIZATION_MODE_RNG_VIEWER:
       SubstitutePlaceholderStringTags(0, entity, 0);
