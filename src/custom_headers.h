@@ -78,3 +78,8 @@ static inline bool Cardi_ReadBackup(uint32_t src, void* dst, uint32_t len, void*
 static inline bool Card_ReadEeprom(uint32_t src, void* dst, uint32_t len) {
     return Cardi_ReadBackup(src, dst, len, NULL, NULL, false);
 }
+
+void Card_LockBackup(uint16_t lock_id);
+void Card_UnlockBackup(uint16_t lock_id);
+
+int OS_GetLockID(void);
