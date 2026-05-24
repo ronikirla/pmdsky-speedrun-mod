@@ -115,6 +115,14 @@ void CustomPlayTimerTick(struct play_time *param_1)
     return;
 }
 
+void AddTimePenalty(struct play_time *play_time, int additional_frames)
+{
+    int total_frames = play_time->frames + additional_frames;
+    play_time->seconds += total_frames / 60;
+    play_time->frames = (uint8_t)(total_frames % 60);
+    return;
+}
+
 __attribute__((used)) int HijackNoteLoadBaseAndLoadIGT(void)
 {
     igt_loaded = false;
@@ -130,9 +138,12 @@ __attribute__((used)) void *HijackNoteSaveBaseAndSetSaveVariable(void)
     return res;
 }
 
-__attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariable(void *whatever_this_was)
+__attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimePenaltyByTheWay(void *whatever_this_was)
 {
     is_saving = false;
+
+    struct play_time *igt = (struct play_time *)&PLAY_TIME_SECONDS;
+    AddTimePenalty(igt, 200);
     MemFree(whatever_this_was);
     return;
 }

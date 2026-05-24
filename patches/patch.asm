@@ -5,7 +5,7 @@
     .org 0x020492b0
         bl HijackNoteSaveBaseAndSetSaveVariable
     .org 0x02049508
-        bl HijackNoteSaveBaseAndUnsetSaveVariable
+        bl HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimePenaltyByTheWay
     .org 0x02051150
         b CheckIfShouldIncrementPlayTimer
 
