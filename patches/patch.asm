@@ -2,6 +2,13 @@
 .include "symbols.asm"
 
 .open "arm9.bin", arm9_start
+    .org 0x020492b0
+        bl HijackNoteSaveBaseAndSetSaveVariable
+    .org 0x02049508
+        bl HijackNoteSaveBaseAndUnsetSaveVariable
+    .org 0x02051150
+        b CheckIfShouldIncrementPlayTimer
+
     .org 0x020662b8
         bl HijackNoteLoadBaseAndLoadIGT
     // Remove the busy sleep from G3X_Reset since we handle the frame synchronization separately
