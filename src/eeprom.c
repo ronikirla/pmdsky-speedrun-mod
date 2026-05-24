@@ -93,6 +93,7 @@ void LoadIGTAndConfigurations(void)
 
 __attribute__((used)) int HijackNoteLoadBaseAndLoadIGT(void)
 {
+    igt_loaded = false;
     int res = NoteLoadBase();
     LoadIGTAndConfigurations();
     return res;
