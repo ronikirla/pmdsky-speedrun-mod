@@ -63,7 +63,7 @@ __attribute__((used)) bool CustomWaitTillVBlank(void) {
         skipped_g3x_sleep = true;
         return 1;
       }
-    skipped_g3x_sleep = false;
+      skipped_g3x_sleep = false;
     default:
       // Original decompiled code
       bool uVar1;
@@ -95,7 +95,7 @@ __attribute__((used)) bool CustomWaitTillVBlank(void) {
 __attribute__((used)) void SkipAICardRead(int string_id, struct entity* entity) {
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_THROTTLE:
-      OS_Sleep(1);
+      OS_SpinWait(OS_MilliSecondsToTicks(1) * (64 * 2));
       return;
     case OPTIMIZATION_MODE_DEFAULT:
       SubstitutePlaceholderStringTags(0, entity, 0);

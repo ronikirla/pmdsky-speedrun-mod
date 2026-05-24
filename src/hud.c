@@ -80,11 +80,11 @@ void HUDCallback(int window_id) {};
 bool draw_in_progress = false;
 // Refreshes the window with the current strings behind the string pointers
 void UpdateHUD(enum hud_slot slot) {
-  draw_in_progress = true;
   int window_id = hud_status[slot].window_id;
   if (slot == HUD_SLOT_NULL || window_id == -1) {
     return;
   }
+  draw_in_progress = true;
   ClearWindow(window_id);
   for (int i = 0; i < MAX_STRINGS; i++) {
     char* string = hud_status[slot].strings[i];

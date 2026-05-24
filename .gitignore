@@ -11,5 +11,6 @@ out.*
 *.sav
 *.nds
 *.nds.skytemple
+*.mln
 
 symbols/generated_*.ld

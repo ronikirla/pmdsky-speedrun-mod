@@ -51,3 +51,9 @@ void FUN_0200265c(void* param_1);
 static inline bool GX_IsVBlank(void) {
   return (*(uint16_t*) (0x04000000 + 0x004)) & 0x0001;
 }
+
+void OS_SpinWait(uint32_t cycle);
+
+#define HW_SYSTEM_CLOCK             33514000
+#define OS_SYSTEM_CLOCK             HW_SYSTEM_CLOCK
+#define OS_MilliSecondsToTicks(   msec ) (( ((OS_SYSTEM_CLOCK/1000) * (uint64_t)(msec)) / 64 ))
