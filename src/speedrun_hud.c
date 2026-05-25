@@ -189,6 +189,7 @@ void AssignHUDSlots(void)
                   input_display->string,
                   &input_display->x_offset);
     break;
+    default:
   }
 }
 
