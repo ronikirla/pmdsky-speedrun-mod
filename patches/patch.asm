@@ -104,6 +104,9 @@
 .open "overlay0.bin", overlay0_start
     .org 0x022beb40
         bl HijackUnloadMenuStateCall
+    // Run the play timer in the main menu
+    .org 0x022bec40
+        bl PlayTimerTickAndWaitTillVBlank
 .close
 
 .open "overlay29.bin", overlay29_start

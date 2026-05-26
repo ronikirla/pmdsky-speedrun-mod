@@ -65,15 +65,8 @@ void LoadIGTAndConfigurations(void)
     if (eeprom_timer.index == 0xFF) {
         goto CLEANUP;
     }
-    // Read IGT
-    int eeprom_offset = 0x1 + eeprom_timer.index * 0x5;
-    Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS + eeprom_offset, &eeprom_timer.redundant_timers[eeprom_timer.index], 5);
     // Read Configurations
     Card_ReadEeprom(EEPROM_CONFIGURATIONS_BASE_ADDRESS, &eeprom_configurations, 8);
-
-    struct play_time *igt = (struct play_time *)&PLAY_TIME_SECONDS;
-    igt->seconds = eeprom_timer.redundant_timers[eeprom_timer.index].seconds;
-    igt->frames = eeprom_timer.redundant_timers[eeprom_timer.index].frames;
 
     if (eeprom_configurations.SRAM_hud_display_mode < 0 || eeprom_configurations.SRAM_hud_display_mode >= HUD_DISPLAY_COUNT)
     {
@@ -88,6 +81,19 @@ void LoadIGTAndConfigurations(void)
 
     // Need to update the HUD slot that corresponds to the currently active mode here too, or else it won't graphically show up
     AssignHUDSlots();
+
+    // Do not load the time if there is no time in the save data (aka deleted save)
+    if (PLAY_TIME_SECONDS == 0) {
+        goto CLEANUP;
+    }
+
+    // Read IGT
+    int eeprom_offset = 0x1 + eeprom_timer.index * 0x5;
+    Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS + eeprom_offset, &eeprom_timer.redundant_timers[eeprom_timer.index], 5);
+
+    struct play_time *igt = (struct play_time *)&PLAY_TIME_SECONDS;
+    igt->seconds = eeprom_timer.redundant_timers[eeprom_timer.index].seconds;
+    igt->frames = eeprom_timer.redundant_timers[eeprom_timer.index].frames;
 
 CLEANUP:
     Card_UnlockBackup(eeprom_lock_id);

@@ -32,6 +32,7 @@ void UnloadMenuState(void);
 
 void NamePrompt(int param_1, int param_2, int param_3);
 
+// pmdsky-debug is wrong so need to uncomment OS_CreateThread and OS_SleepThread in there for now
 void OS_CreateThread(struct thread *thread,
                      void (*func) (void*),
                      void *arg,
@@ -83,3 +84,5 @@ void Card_LockBackup(uint16_t lock_id);
 void Card_UnlockBackup(uint16_t lock_id);
 
 int OS_GetLockID(void);
+
+uint8_t WaitTillVBlank(void);
