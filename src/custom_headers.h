@@ -12,19 +12,19 @@
 };*/
 
 struct held_buttons {
-    bool a : 1;         // 0x0
-    bool b : 1;         // 0x1
-    bool select : 1;    // 0x2
-    bool start : 1;     // 0x3
-    bool right : 1;     // 0x4
-    bool left : 1;      // 0x5
-    bool up : 1;        // 0x6
-    bool down : 1;      // 0x7
-    bool r : 1;         // 0x8
-    bool l : 1;         // 0x9
-    bool x : 1;         // 0xA
-    bool y : 1;         // 0xB
-    uint8_t _padding : 4;
+  bool a : 1;         // 0x0
+  bool b : 1;         // 0x1
+  bool select : 1;    // 0x2
+  bool start : 1;     // 0x3
+  bool right : 1;     // 0x4
+  bool left : 1;      // 0x5
+  bool up : 1;        // 0x6
+  bool down : 1;      // 0x7
+  bool r : 1;         // 0x8
+  bool l : 1;         // 0x9
+  bool x : 1;         // 0xA
+  bool y : 1;         // 0xB
+  uint8_t _padding : 4;
 };
 ASSERT_SIZE(struct held_buttons, 2);
 
@@ -60,24 +60,24 @@ bool Cardi_RequestStreamCommand(uint32_t src, uint32_t dst, uint32_t len,
                                    uint32_t req_type, int req_retry, uint32_t req_mode);
 
 static inline bool Cardi_ProgramAndVerifyBackup(uint32_t dst, const void *src, uint32_t len,
-                                             void* callback, void *arg, bool is_async)
+                                              void* callback, void *arg, bool is_async)
 {
-    return Cardi_RequestStreamCommand((uint32_t)src, (uint32_t)dst, len, callback, arg, is_async,
-                                      8, 10, 2);
+  return Cardi_RequestStreamCommand((uint32_t)src, (uint32_t)dst, len, callback, arg, is_async,
+                                     8, 10, 2);
 }
 
 static inline bool Card_WriteAndVerifyEeprom(uint32_t dst, const void *src, uint32_t len) {
-    return Cardi_ProgramAndVerifyBackup(dst, src, len, NULL, NULL, false);
+  return Cardi_ProgramAndVerifyBackup(dst, src, len, NULL, NULL, false);
 }
 
 static inline bool Cardi_ReadBackup(uint32_t src, void* dst, uint32_t len, void* callback, void* arg, bool is_async) {
-    return Cardi_RequestStreamCommand((uint32_t)src, (uint32_t)dst, len,
-                                      callback, arg, is_async,
-                                      6, 1, 0);
+  return Cardi_RequestStreamCommand((uint32_t)src, (uint32_t)dst, len,
+                                     callback, arg, is_async,
+                                     6, 1, 0);
 }
 
 static inline bool Card_ReadEeprom(uint32_t src, void* dst, uint32_t len) {
-    return Cardi_ReadBackup(src, dst, len, NULL, NULL, false);
+  return Cardi_ReadBackup(src, dst, len, NULL, NULL, false);
 }
 
 void Card_LockBackup(uint16_t lock_id);
