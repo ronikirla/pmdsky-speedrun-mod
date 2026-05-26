@@ -86,3 +86,6 @@ void Card_UnlockBackup(uint16_t lock_id);
 int OS_GetLockID(void);
 
 uint8_t WaitTillVBlank(void);
+
+// Combined play time struct covering both PLAY_TIME_SECONDS and PLAY_TIME_FRAME_COUNTER
+extern struct play_time PLAY_TIME;

@@ -63,8 +63,7 @@ void LoadIGTAndConfigurations(void)
     Card_LockBackup(eeprom_lock_id);
     // Read index
     Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS, &eeprom_timer.index, 1);
-    if (eeprom_timer.index == 0xFF)
-    {
+    if (eeprom_timer.index == 0xFF) {
         goto CLEANUP;
     }
     // Read Configurations
@@ -93,9 +92,8 @@ void LoadIGTAndConfigurations(void)
     int eeprom_offset = 0x1 + eeprom_timer.index * 0x5;
     Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS + eeprom_offset, &eeprom_timer.redundant_timers[eeprom_timer.index], 5);
 
-    struct play_time *igt = (struct play_time *)&PLAY_TIME_SECONDS;
-    igt->seconds = eeprom_timer.redundant_timers[eeprom_timer.index].seconds;
-    igt->frames = eeprom_timer.redundant_timers[eeprom_timer.index].frames;
+    PLAY_TIME.seconds = eeprom_timer.redundant_timers[eeprom_timer.index].seconds;
+    PLAY_TIME.frames = eeprom_timer.redundant_timers[eeprom_timer.index].frames;
 
 CLEANUP:
     Card_UnlockBackup(eeprom_lock_id);
@@ -148,8 +146,7 @@ __attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimeP
 {
     is_saving = false;
 
-    struct play_time *igt = (struct play_time *)&PLAY_TIME_SECONDS;
-    AddTimePenalty(igt, 200);
+    AddTimePenalty(&PLAY_TIME, 200);
     MemFree(whatever_this_was);
     return;
 }
