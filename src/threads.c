@@ -10,6 +10,7 @@
 #include "input_display.h"
 #include "optimizations.h"
 #include "eeprom.h"
+#include "soft_reset.h"
 
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_2KB 1024 * 2
@@ -55,6 +56,7 @@ void VCount0Routine(void*) {
 // mod by only running it while we would be sleeping
 void MainRoutine(void*) {
   while (true) {
+    HandleSoftReset();
     HandleHUDToggle();
     HandleSpeedToggle();
     HandleTimerInput();
