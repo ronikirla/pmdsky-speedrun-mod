@@ -9,6 +9,7 @@ struct eeprom_configurations eeprom_configurations;
 #define EEPROM_TIMER_BASE_ADDRESS 0xb65c
 #define EEPROM_CONFIGURATIONS_BASE_ADDRESS 0xb670
 
+bool is_saving = false;
 bool igt_loaded = false;
 int eeprom_lock_id;
 
@@ -62,7 +63,8 @@ void LoadIGTAndConfigurations(void)
     Card_LockBackup(eeprom_lock_id);
     // Read index
     Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS, &eeprom_timer.index, 1);
-    if (eeprom_timer.index == 0xFF) {
+    if (eeprom_timer.index == 0xFF)
+    {
         goto CLEANUP;
     }
     // Read Configurations
@@ -100,10 +102,63 @@ CLEANUP:
     igt_loaded = true;
 }
 
+void CustomPlayTimerTick(struct play_time *param_1)
+
+{
+    char bVar1;
+
+    bVar1 = param_1->frames + 1;
+    param_1->frames = bVar1;
+    if (0x3b < bVar1)
+    {
+        param_1->frames = '\0';
+        if (param_1->seconds < MAX_PLAY_TIME)
+        {
+            param_1->seconds = param_1->seconds + 1;
+        }
+        return;
+    }
+    return;
+}
+
+void AddTimePenalty(struct play_time *play_time, int additional_frames)
+{
+    int total_frames = play_time->frames + additional_frames;
+    play_time->seconds += total_frames / 60;
+    play_time->frames = (uint8_t)(total_frames % 60);
+    return;
+}
+
 __attribute__((used)) int HijackNoteLoadBaseAndLoadIGT(void)
 {
     igt_loaded = false;
     int res = NoteLoadBase();
     LoadIGTAndConfigurations();
     return res;
+}
+
+__attribute__((used)) void *HijackNoteSaveBaseAndSetSaveVariable(void)
+{
+    is_saving = true;
+    void *res = MemAlloc(0xB65C, 5);
+    return res;
+}
+
+__attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimePenaltyByTheWay(void *whatever_this_was)
+{
+    is_saving = false;
+
+    struct play_time *igt = (struct play_time *)&PLAY_TIME_SECONDS;
+    AddTimePenalty(igt, 200);
+    MemFree(whatever_this_was);
+    return;
+}
+
+__attribute__((used)) void CheckIfShouldIncrementPlayTimer(void *param_1)
+{
+    if (!is_saving)
+    {
+        CustomPlayTimerTick(param_1);
+    }
+    return;
 }
