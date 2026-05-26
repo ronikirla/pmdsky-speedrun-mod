@@ -9,7 +9,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_TREASURE_MEMO},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 1,
     .description_id = 0,
@@ -25,7 +25,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_TREASURE_MEMO},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 2,
     .description_id = 0,
@@ -41,7 +41,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_TREASURE_MEMO},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 3,
     .description_id = 0,
@@ -58,7 +58,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_PROSPECT_WITH_CLIENT},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 3,
     .description_id = 0,
@@ -74,7 +74,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_FIND_ITEM},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 4,
     .description_id = 0,
@@ -90,7 +90,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_FIND_ITEM},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 0,
     .description_id = 0,
@@ -106,7 +106,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_PROSPECT_WITH_CLIENT},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 4,
     .description_id = 0,
@@ -122,7 +122,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_FIND_ITEM},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 0,
     .description_id = 0,
@@ -139,7 +139,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_TREASURE_MEMO},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 4,
     .description_id = 0,
@@ -155,7 +155,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_PROSPECT_WITH_CLIENT},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 4,
     .description_id = 0,
@@ -171,7 +171,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_PROSPECT_WITH_CLIENT},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 4,
     .description_id = 0,
@@ -187,7 +187,7 @@ struct mission missions[] = {
   {
     .status = {.val = MISSION_STATUS_SUSPENDED},
     .type = {.val = MISSION_FIND_ITEM},
-    .subtype = {.none = 0},
+    .subtype = {.other = 0},
     .dungeon_id = {.val = DUNGEON_BEACH_CAVE},
     .floor = 0,
     .description_id = 0,
