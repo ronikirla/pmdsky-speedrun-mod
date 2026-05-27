@@ -1,5 +1,7 @@
 #pragma once
 
+#include <pmdsky.h>
+
 #define SPLIT_COLOR_TAG "[CS:G]"
 #define SPLIT_SHOW_FRAMES 600
 
@@ -9,3 +11,6 @@ int IGTDifferenceFrames(struct play_time* a, struct play_time* b);
 void HandleTimerInput(void);
 
 void UpdateTimer(void);
+
+extern bool file_timer;
+extern struct play_time start_time;

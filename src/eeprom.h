@@ -19,9 +19,12 @@ struct eeprom_configurations
 {
   enum hud_display_mode SRAM_hud_display_mode;
   enum optimization_mode SRAM_optimization_mode;
+  bool SRAM_file_timer;
+  struct play_time SRAM_start_time;
 };
 
 void SaveIGT(void);
 void LoadIGT(void);
 void SaveConfigurations(void);
 void LoadIGTAndConfigurations(void);
+void SaveRNGSeedForSoftReset(void);

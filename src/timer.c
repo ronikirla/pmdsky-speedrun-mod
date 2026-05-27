@@ -3,6 +3,7 @@
 #include <pmdsky.h>
 #include <cot.h>
 #include "custom_headers.h"
+#include "eeprom.h"
 #include "hud.h"
 #include "speedrun_hud.h"
 #include "aps.h"
@@ -73,6 +74,7 @@ void HandleTimerInput(void) {
         memset(&start_time, 0, sizeof(struct play_time));
         file_timer = true;
       }
+      SaveConfigurations();
     }
   } else if (held_buttons.select && held_buttons.l) {
     if (!prev_held_timer) {
