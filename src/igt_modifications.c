@@ -4,20 +4,25 @@
 #include "timer.h"
 
 bool is_saving = false;
+bool just_finished_run = false;
 
-__attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
+__attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void)
+{
   // Magic number for whether we are in the top menu of the main menu.
-  // If not, then advance the play timer. Otherwise pause (normal behaviour)
-  int* main_menu_magic = (int*) 0x22a3670;
-  if (*main_menu_magic != 0x22a3e94 && PLAY_TIME_SECONDS != 0) {
+  // If not, then advance the play timer. Otherwise pause (normal behaviour)s
+  int *main_menu_magic = (int *)0x22a3670;
+  if (*main_menu_magic != 0x22a3e94 && PLAY_TIME_SECONDS != 0)
+  {
     // In main menu with custom timer at zero, advance start_time to keep displayed timer at 0
-    struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
+    struct play_time *igt = (struct play_time *)&PLAY_TIME_SECONDS;
     bool advance_start_time = false;
-    if (IGTDifferenceFrames(igt, &start_time) == 0) {
+    if (IGTDifferenceFrames(igt, &start_time) == 0)
+    {
       advance_start_time = true;
     }
-    PlayTimerTick((struct play_time*) &PLAY_TIME_SECONDS);
-    if (advance_start_time) {
+    PlayTimerTick((struct play_time *)&PLAY_TIME_SECONDS);
+    if (advance_start_time)
+    {
       memcpy(&start_time, igt, sizeof(struct play_time));
     }
   }
@@ -44,10 +49,13 @@ void CustomPlayTimerTick(struct play_time *param_1)
 
 void AddTimePenalty(struct play_time *play_time, int additional_frames)
 {
-  int total_frames = play_time->frames + additional_frames;
-  play_time->seconds += total_frames / 60;
-  play_time->frames = (uint8_t)(total_frames % 60);
-  return;
+  if (!just_finished_run)
+  {
+    int total_frames = play_time->frames + additional_frames;
+    play_time->seconds += total_frames / 60;
+    play_time->frames = (uint8_t)(total_frames % 60);
+    return;
+  }
 }
 
 __attribute__((used)) void *HijackNoteSaveBaseAndSetSaveVariable(void)
@@ -68,7 +76,7 @@ __attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimeP
 
 __attribute__((used)) void CheckIfShouldIncrementPlayTimer(void *param_1)
 {
-  if (!is_saving)
+  if (!is_saving && !just_finished_run)
   {
     CustomPlayTimerTick(param_1);
   }
