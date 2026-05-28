@@ -7,12 +7,12 @@ bool is_saving = false;
 bool just_finished_run = false;
 
 __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
-  // Magic number for whether we are in the top menu of the main menu.
-  // If not, then advance the play timer. Otherwise pause (normal behaviour)
   static int frames_paused = 0;
   static bool was_paused = false;
   static int resume_delay_remaining = 0;
 
+  // Magic number for whether we are in the top menu of the main menu.
+  // If not, then advance the play timer. Otherwise pause (normal behaviour)
   int* main_menu_magic = (int*) 0x22a3670;
   bool is_paused = (*main_menu_magic == 0x22a3e94) || (PLAY_TIME_SECONDS == 0);
 
@@ -37,11 +37,10 @@ __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
       was_paused = false;
       just_finished_run = false;
     }
-    // Don't advance timer during delay
   } else if (!just_finished_run) {
-    // Normal running state - advance the timer
     was_paused = false;
     struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
+    // Set start time to current igt if we reset the timer in the menu
     bool advance_start_time = false;
     if (IGTDifferenceFrames(igt, &start_time) == 0) {
       advance_start_time = true;
@@ -70,7 +69,7 @@ void CustomPlayTimerTick(struct play_time *param_1) {
 }
 
 void AddTimePenalty(struct play_time *play_time, int additional_frames) {
-  if (!just_finished_run) {
+  if (!just_finished_run && PLAY_TIME_SECONDS) {
     int total_frames = play_time->frames + additional_frames;
     play_time->seconds += total_frames / 60;
     play_time->frames = (uint8_t)(total_frames % 60);
