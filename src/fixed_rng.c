@@ -14,13 +14,7 @@ bool fixed_rng = false;
 char base_rng_text[INPUT_LEN + 1];
 uint32_t base_rng_seed;
 
-// Fixed RNG state variables
-uint32_t calls_per_scenario = 0;
-int scenario_prev = -1;
-int level_prev = -1;
-
 // Keyboard menu variables
-char keyboard_default[INPUT_LEN + 1];
 char empty_result[] = "\1";
 
 bool IsFixedRNG() {
@@ -32,6 +26,10 @@ bool IsFixedRNG() {
 // subsequent rng calls. This way each playthrough on the same seed
 // gets the same RNG but the same RNG should not repeat in the same playthrough.
 void ResetRngSeed() {
+  static uint32_t calls_per_scenario = 0;
+  static int scenario_prev = -1;
+  static int level_prev = -1;
+
   if (!fixed_rng) {
     return;
   }
@@ -134,6 +132,8 @@ __attribute__((used)) void SetFixedRNGSeed(char* buffer) {
 // Replace the provided default value in the keyboard with a Rand16Bit() call result
 // or the previously inputted seed
 __attribute__((used)) int ShowKeyboardWithRandomDefaultValue(int message_id, char* buffer, int param_3, char* empty_fallback) {
+  static char keyboard_default[INPUT_LEN + 1];
+
   if (fixed_rng) {
     strncpy(keyboard_default, base_rng_text, INPUT_LEN);
   } else {

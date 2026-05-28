@@ -56,8 +56,9 @@ char *GetOptimizationModeString(void) {
   return optimization_mode_strings[optimization_mode];
 }
 
-bool skipped_g3x_sleep = false;
 __attribute__((used)) bool CustomWaitTillVBlank(void) {
+  static bool skipped_g3x_sleep = false;
+
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_FAST:
     case OPTIMIZATION_MODE_RNG_VIEWER:
