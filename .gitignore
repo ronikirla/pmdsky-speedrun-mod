@@ -13,3 +13,5 @@ out.*
 *.nds.skytemple
 
 symbols/generated_*.ld
+
+*.mln
