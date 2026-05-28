@@ -9,9 +9,38 @@ bool just_finished_run = false;
 __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
   // Magic number for whether we are in the top menu of the main menu.
   // If not, then advance the play timer. Otherwise pause (normal behaviour)
+  static int frames_paused = 0;
+  static bool was_paused = false;
+  static int resume_delay_remaining = 0;
+
   int* main_menu_magic = (int*) 0x22a3670;
-  if (*main_menu_magic != 0x22a3e94 && PLAY_TIME_SECONDS != 0) {
-    // In main menu with custom timer at zero, advance start_time to keep displayed timer at 0
+  bool is_paused = (*main_menu_magic == 0x22a3e94) || (PLAY_TIME_SECONDS == 0);
+
+  if (is_paused) {
+    // Timer is paused - count frames
+    frames_paused++;
+    was_paused = true;
+    resume_delay_remaining = 0;
+  } else if (was_paused && resume_delay_remaining == 0) {
+    // Transition from paused to running - calculate and set resume delay
+    // Delay is max(10, 30 - frames_paused) to ensure at least 30 frames total
+    int delay = 30 - frames_paused;
+    if (delay < 10) delay = 10;
+    resume_delay_remaining = delay;
+    frames_paused = 0;
+    // Don't advance timer yet - still in delay period
+  } else if (resume_delay_remaining > 0) {
+    // Still in resume delay period
+    resume_delay_remaining--;
+    if (resume_delay_remaining == 0) {
+      // Delay expired - now actually resume
+      was_paused = false;
+      just_finished_run = false;
+    }
+    // Don't advance timer during delay
+  } else if (!just_finished_run) {
+    // Normal running state - advance the timer
+    was_paused = false;
     struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
     bool advance_start_time = false;
     if (IGTDifferenceFrames(igt, &start_time) == 0) {
