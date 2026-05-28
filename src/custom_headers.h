@@ -90,3 +90,8 @@ uint8_t WaitTillVBlank(void);
 
 // Combined play time struct covering both PLAY_TIME_SECONDS and PLAY_TIME_FRAME_COUNTER
 extern struct play_time PLAY_TIME;
+void OS_SpinWait(uint32_t cycle);
+
+#define HW_SYSTEM_CLOCK             33514000
+#define OS_SYSTEM_CLOCK             HW_SYSTEM_CLOCK
+#define OS_MilliSecondsToTicks(   msec ) (( ((OS_SYSTEM_CLOCK/1000) * (uint64_t)(msec)) / 64 ))

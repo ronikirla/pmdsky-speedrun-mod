@@ -101,7 +101,7 @@ __attribute__((used)) bool CustomWaitTillVBlank(void) {
 __attribute__((used)) void SkipAICardRead(int string_id, struct entity *entity) {
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_THROTTLE:
-      OS_Sleep(1);
+      OS_SpinWait(OS_MilliSecondsToTicks(1) * (64 * 2));
       return;
     case OPTIMIZATION_MODE_DEFAULT:
       SubstitutePlaceholderStringTags(0, entity, 0);

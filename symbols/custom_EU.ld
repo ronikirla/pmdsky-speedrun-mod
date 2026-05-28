@@ -43,3 +43,4 @@ Card_LockBackup = 0x02083804;
 Card_UnlockBackup = 0x02083814;
 
 WaitTillVBlank = 0x02003a40;
+OS_SpinWait = 0x0207bbec;
