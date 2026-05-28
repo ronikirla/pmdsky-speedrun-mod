@@ -15,21 +15,17 @@ struct eeprom_configurations eeprom_configurations;
 bool igt_loaded = false;
 int eeprom_lock_id;
 
-void SaveIGT(void)
-{
-  if (!igt_loaded)
-  {
+void SaveIGT(void) {
+  if (!igt_loaded) {
     return;
   }
   int eeprom_offset = 0x0;
   int new_index = 0;
-  if (eeprom_timer.index == 0)
-  {
+  if (eeprom_timer.index == 0) {
     new_index = 1;
     eeprom_offset = 0x6;
   }
-  else
-  {
+  else {
     new_index = 0;
     eeprom_offset = 0x1;
   }
@@ -46,8 +42,7 @@ void SaveIGT(void)
   Card_UnlockBackup(eeprom_lock_id);
 }
 
-void SaveRNGSeedForSoftReset(void)
-{
+void SaveRNGSeedForSoftReset(void) {
   char rng_seed_save[RNG_INPUT_LEN + 1];
   memcpy(rng_seed_save, base_rng_text, RNG_INPUT_LEN + 1);
 
@@ -57,8 +52,7 @@ void SaveRNGSeedForSoftReset(void)
   Card_UnlockBackup(lock_id);
 }
 
-void SaveConfigurations(void)
-{
+void SaveConfigurations(void) {
   eeprom_configurations.SRAM_hud_display_mode = hud_display_mode;
   eeprom_configurations.SRAM_optimization_mode = optimization_mode;
   eeprom_configurations.SRAM_file_timer = file_timer;
@@ -71,8 +65,7 @@ void SaveConfigurations(void)
   Card_UnlockBackup(eeprom_lock_id);
 }
 
-void LoadIGTAndConfigurations(void)
-{
+void LoadIGTAndConfigurations(void) {
   eeprom_lock_id = OS_GetLockID();
 
   Card_LockBackup(eeprom_lock_id);
@@ -84,12 +77,10 @@ void LoadIGTAndConfigurations(void)
   // Read Configurations
   Card_ReadEeprom(EEPROM_CONFIGURATIONS_BASE_ADDRESS, &eeprom_configurations, sizeof(eeprom_configurations));
 
-  if (eeprom_configurations.SRAM_hud_display_mode < 0 || eeprom_configurations.SRAM_hud_display_mode >= HUD_DISPLAY_COUNT)
-  {
+  if (eeprom_configurations.SRAM_hud_display_mode < 0 || eeprom_configurations.SRAM_hud_display_mode >= HUD_DISPLAY_COUNT) {
     eeprom_configurations.SRAM_hud_display_mode = HUD_DISPLAY_NONE;
   }
-  if (eeprom_configurations.SRAM_optimization_mode < 0 || eeprom_configurations.SRAM_optimization_mode >= OPTIMIZATION_MODE_COUNT)
-  {
+  if (eeprom_configurations.SRAM_optimization_mode < 0 || eeprom_configurations.SRAM_optimization_mode >= OPTIMIZATION_MODE_COUNT) {
     eeprom_configurations.SRAM_optimization_mode = OPTIMIZATION_MODE_DEFAULT;
   }
   hud_display_mode = eeprom_configurations.SRAM_hud_display_mode;
@@ -137,8 +128,7 @@ CLEANUP:
   igt_loaded = true;
 }
 
-__attribute__((used)) int HijackNoteLoadBaseAndLoadIGT(void)
-{
+__attribute__((used)) int HijackNoteLoadBaseAndLoadIGT(void) {
   igt_loaded = false;
   int res = NoteLoadBase();
   LoadIGTAndConfigurations();
