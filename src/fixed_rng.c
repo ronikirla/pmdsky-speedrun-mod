@@ -14,6 +14,7 @@
 bool fixed_rng = false;
 char base_rng_text[INPUT_LEN + 1];
 uint32_t base_rng_seed;
+bool lock_rng_advances = false;
 
 // Keyboard menu variables
 char empty_result[] = "\1";
@@ -83,14 +84,20 @@ __attribute__((used)) void HijackSetDungeonRngPreseedAndResetRngSeed() {
   SetDungeonRngPreseed(preseed);
 }
 
-__attribute__((used)) void HijackGenerateKecleonItems1AndResetRngSeed(enum kecleon_shop_version kecleon_shop_version) {
+__attribute__((used)) void HijackGenerateKecleonItems1AndLockRngAdvances(enum kecleon_shop_version kecleon_shop_version) {
+  lock_rng_advances = true;
   ResetRngSeed();
   GenerateKecleonItems1(kecleon_shop_version);
 }
 
-__attribute__((used)) void HijackGenerateDailyMissionsAndResetRngSeed(void) {
-  ResetRngSeed();
-  GenerateDailyMissions();
+__attribute__((used)) void HijackGenerateKecleonItems2AndUnlockRngAdvances(enum kecleon_shop_version kecleon_shop_version) {
+  GenerateKecleonItems2(kecleon_shop_version);
+  lock_rng_advances = false;
+}
+
+__attribute__((used)) void HijackGenerateCroagunkItemsAndUnlockRngAdvances(enum kecleon_shop_version kecleon_shop_version) {
+  GenerateCroagunkItems();
+  lock_rng_advances = false;
 }
 
 __attribute__((used)) uint32_t HijackRandIntAndResetRngSeed(int high) {
@@ -150,4 +157,10 @@ __attribute__((used)) int ShowKeyboardWithRandomDefaultValue(int message_id, cha
     snprintf(keyboard_default, INPUT_LEN, "%d", Rand16Bit());
   }
   return ShowKeyboard(message_id, keyboard_default, param_3, empty_result);
+}
+
+__attribute__((used)) void Rand16BitIfAdvancesNotLocked(void) {
+  if (!lock_rng_advances) {
+    Rand16Bit();
+  }
 }
