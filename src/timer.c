@@ -58,7 +58,7 @@ __attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int 
 void HandleTimerInput(void) {
   struct held_buttons held_buttons;
   GetHeldButtons(0, (void*) &held_buttons);
-  if (held_buttons.start && held_buttons.l) {
+  if (held_buttons.start && held_buttons.l && !held_buttons.r) {
     if (!prev_held_timer) {
       ResetAPS();
       ResetDungeonRNGAdvances();
@@ -74,7 +74,7 @@ void HandleTimerInput(void) {
       }
       SaveConfigurations();
     }
-  } else if (held_buttons.select && held_buttons.l) {
+  } else if (held_buttons.select && held_buttons.l && !held_buttons.r) {
     if (!prev_held_timer) {
       prev_held_timer = true;
       ResetSplitRemainingFrames();

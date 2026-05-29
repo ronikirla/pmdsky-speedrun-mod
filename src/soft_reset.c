@@ -10,7 +10,7 @@ void HandleSoftReset(void) {
   struct held_buttons held_buttons;
   GetHeldButtons(0, (void*) &held_buttons);
 
-  if (held_buttons.l && held_buttons.r && held_buttons.select) {
+  if (held_buttons.l && held_buttons.r && held_buttons.start && held_buttons.select) {
       if (IsFixedRNG()) {
         SaveRNGSeedForSoftReset();
       }

@@ -185,7 +185,7 @@ void AssignHUDSlots(void) {
 void HandleHUDToggle(void) {
   struct held_buttons held_buttons;
   GetHeldButtons(0, (void *)&held_buttons);
-  if (held_buttons.start && held_buttons.select) {
+  if (held_buttons.start && held_buttons.select && !held_buttons.r) {
     if (!prev_held_srh) {
       prev_held_srh = true;
       switch (hud_display_mode) {
