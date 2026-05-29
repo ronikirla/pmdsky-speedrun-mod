@@ -5,6 +5,7 @@
 #include <pmdsky.h>
 #include <cot.h>
 #include "custom_headers.h"
+#include "fixed_rng.h"
 #include "speedrun_hud.h"
 
 #define INPUT_LEN 10
@@ -21,15 +22,18 @@ bool IsFixedRNG() {
   return fixed_rng;
 }
 
+// Fixed RNG state variables (saved to EEPROM)
+struct fixed_rng_state fixed_rng_state = {
+  .calls_per_scenario = 0,
+  .scenario_prev = -1,
+  .level_prev = -1,
+};
+
 // Reset the rng to a state derived from a base seed and the current save progress
 // This can be called by other functions to give deterministic results for
 // subsequent rng calls. This way each playthrough on the same seed
 // gets the same RNG but the same RNG should not repeat in the same playthrough.
 void ResetRngSeed() {
-  static uint32_t calls_per_scenario = 0;
-  static int scenario_prev = -1;
-  static int level_prev = -1;
-
   if (!fixed_rng) {
     return;
   }
@@ -46,18 +50,24 @@ void ResetRngSeed() {
   
   // We want to advance the RNG if the player does not progress in the game,
   // but we want it to sync up again once they do progress.
-  if (scenario_prev != scenario || level_prev != level) {
-    calls_per_scenario = 0;
+  if (fixed_rng_state.scenario_prev != scenario || fixed_rng_state.level_prev != level) {
+    fixed_rng_state.calls_per_scenario = 0;
   } else {
-    calls_per_scenario++;
+    fixed_rng_state.calls_per_scenario++;
   }
   //Debug_Print0("scenario: %x\n", scenario);
   //Debug_Print0("level: %x\n", level);
-  //Debug_Print0("call per scenario: %x\n", calls_per_scenario);
-  scenario_prev = scenario;
-  level_prev = level;
+  //Debug_Print0("call per scenario: %x\n", fixed_rng_state.calls_per_scenario);
+  fixed_rng_state.scenario_prev = scenario;
+  fixed_rng_state.level_prev = level;
 
-  uint16_t seed = base_rng_seed ^ scenario ^ (level << 5) ^ (calls_per_scenario << 12);
+  // Save to EEPROM whenever the state changes
+  int lock_id = OS_GetLockID();
+  Card_LockBackup(lock_id);
+  Card_WriteAndVerifyEeprom(EEPROM_RNG_STATE_BASE_ADDRESS, &fixed_rng_state, sizeof(fixed_rng_state));
+  Card_UnlockBackup(lock_id);
+
+  uint16_t seed = base_rng_seed ^ scenario ^ (level << 5) ^ (fixed_rng_state.calls_per_scenario << 12);
   //Debug_Print0("seed: %x\n", seed);
   SetRngSeed(seed);
   Rand16Bit();

@@ -86,9 +86,11 @@ void LoadIGTAndConfigurations(void) {
   hud_display_mode = eeprom_configurations.SRAM_hud_display_mode;
   optimization_mode = eeprom_configurations.SRAM_optimization_mode;
 
-  file_timer = eeprom_configurations.SRAM_file_timer;
-  start_time = eeprom_configurations.SRAM_start_time;
-
+  if (eeprom_configurations.SRAM_file_timer != 0xFF) {
+    file_timer = eeprom_configurations.SRAM_file_timer;
+    start_time = eeprom_configurations.SRAM_start_time;
+  }
+  
   // Load RNG seed from EEPROM and apply it, then clear from EEPROM (only survives soft reset)
   char rng_seed_loaded[RNG_INPUT_LEN + 1];
   Card_ReadEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, rng_seed_loaded, RNG_INPUT_LEN + 1);
@@ -123,6 +125,9 @@ void LoadIGTAndConfigurations(void) {
   PLAY_TIME.seconds = eeprom_timer.redundant_timers[eeprom_timer.index].seconds;
   PLAY_TIME.frames = eeprom_timer.redundant_timers[eeprom_timer.index].frames;
 
+  // Load fixed RNG state
+  Card_ReadEeprom(EEPROM_RNG_STATE_BASE_ADDRESS, &fixed_rng_state, sizeof(fixed_rng_state));
+
 CLEANUP:
   Card_UnlockBackup(eeprom_lock_id);
   igt_loaded = true;
@@ -134,4 +139,3 @@ __attribute__((used)) int HijackNoteLoadBaseAndLoadIGT(void) {
   LoadIGTAndConfigurations();
   return res;
 }
-
