@@ -9,6 +9,7 @@
 #include "speedrun_hud.h"
 #include "aps.h"
 #include "fps.h"
+#include "eeprom.h"
 
 #define OFFSET 38
 
@@ -44,6 +45,14 @@ void ResetAPSRemainingFrames(void) {
 
 struct aps_split* GetCurrentAPSSplit(void) {
   return &current_aps_split;
+}
+
+bool GetShowIdleSeconds(void) {
+  return show_idle_seconds;
+}
+
+void SetShowIdleSeconds(bool val) {
+  show_idle_seconds = val;
 }
 
 // Count the action when SetLeaderAction() returns, i.e, when the player has inputted an action
@@ -103,6 +112,7 @@ void HandleAPSInput(void) {
       // Double-tap detected, toggle idle seconds display
       show_idle_seconds = !show_idle_seconds;
       frames_since_last_start_press = -999; // Reset after double-tap
+      SaveConfigurations();
     } else {
       // Single press, start counting frames for potential double-tap
       frames_since_last_start_press = 0;

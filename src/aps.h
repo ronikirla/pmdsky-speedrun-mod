@@ -5,6 +5,8 @@ void UpdateAPS(void);
 void HandleAPSInput(void);
 void ResetAPS(void);
 void ResetAPSRemainingFrames(void);
+bool GetShowIdleSeconds(void);
+void SetShowIdleSeconds(bool val);
 
 struct aps_split {
   char string[HUD_LEN];

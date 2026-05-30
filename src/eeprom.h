@@ -2,6 +2,7 @@
 #include <pmdsky.h>
 #include "speedrun_hud.h"
 #include "optimizations.h"
+#include "aps.h"
 
 struct play_time_no_padding
 {
@@ -21,6 +22,7 @@ struct eeprom_configurations
   enum optimization_mode SRAM_optimization_mode;
   bool SRAM_file_timer;
   struct play_time SRAM_start_time;
+  bool SRAM_show_idle_seconds;
 };
 
 void SaveIGT(void);

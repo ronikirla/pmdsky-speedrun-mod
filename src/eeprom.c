@@ -5,6 +5,7 @@
 #include "speedrun_hud.h"
 #include "optimizations.h"
 #include "timer.h"
+#include "aps.h"
 
 struct eeprom_timer eeprom_timer;
 struct eeprom_configurations eeprom_configurations;
@@ -57,6 +58,7 @@ void SaveConfigurations(void) {
   eeprom_configurations.SRAM_optimization_mode = optimization_mode;
   eeprom_configurations.SRAM_file_timer = file_timer;
   eeprom_configurations.SRAM_start_time = start_time;
+  eeprom_configurations.SRAM_show_idle_seconds = GetShowIdleSeconds();
 
   eeprom_lock_id = OS_GetLockID();
 
@@ -89,6 +91,9 @@ void LoadIGTAndConfigurations(void) {
   if (eeprom_configurations.SRAM_file_timer != 0xFF) {
     file_timer = eeprom_configurations.SRAM_file_timer;
     start_time = eeprom_configurations.SRAM_start_time;
+  }
+  if (eeprom_configurations.SRAM_show_idle_seconds != 0xFF) {
+    SetShowIdleSeconds(eeprom_configurations.SRAM_show_idle_seconds);
   }
   
   // Load RNG seed from EEPROM and apply it, then clear from EEPROM (only survives soft reset)
