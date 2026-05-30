@@ -60,6 +60,7 @@ void MainRoutine(void*) {
     HandleHUDToggle();
     HandleSpeedToggle();
     HandleTimerInput();
+    HandleAPSInput();
     UpdateTimer();
     UpdateFPS();
     UpdateAPS();
