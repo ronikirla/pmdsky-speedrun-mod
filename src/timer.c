@@ -93,6 +93,14 @@ void UpdateTimer(void) {
     return;
   }
 
+  // Detect save file deletion: if IGT dropped below start time, reset the timer
+  if (!file_timer && (igt->seconds < start_time.seconds || 
+      (igt->seconds == start_time.seconds && igt->frames < start_time.frames))) {
+    memset(&start_time, 0, sizeof(struct play_time));
+    file_timer = true;
+    SaveConfigurations();
+  }
+
   struct play_time run_igt;
   IGTDifference(&run_igt, igt, &start_time);
   
