@@ -63,7 +63,7 @@ The reason for its inclusion is mainly the fact that this game lags a lot while 
 
 Displays your current actions per seconds of idle time. This can be used to measure your movement speed. Pink color indicates that you're currently idle,
 while dark red means that you are missing a pause skip (the game is waiting for a B+A or dpad input to advance). The counter resets at the start of every
-dungeon. Double tap **start** to switch the regular APS counter and a direct display of idle time.
+dungeon. Double tap **start** to switch between the regular APS counter and a direct display of idle time.
 
 ### Input display
 
