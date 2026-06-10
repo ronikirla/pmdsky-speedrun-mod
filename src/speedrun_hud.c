@@ -28,6 +28,7 @@
 #define TIMER_BOTTOM_X_OFFSET 175
 
 enum hud_display_mode hud_display_mode = HUD_DISPLAY_NONE;
+bool menu_maximal_override_active = false;
 
 struct speedrun_hud_string
 {
@@ -95,8 +96,14 @@ void UpdateHUDString(enum speedrun_hud_string_type shst, char *str, uint8_t x_of
       return;
   }
   strncpy(loc, str, HUD_LEN);
+  // Use maximal mode when in main menu with non-default optimization mode
+  enum hud_display_mode effective_mode = hud_display_mode;
+  if (menu_maximal_override_active) {
+    effective_mode = HUD_DISPLAY_MAXIMAL;
+  }
+  
   // Update the HUD slot that corresponds to the currently active mode
-  switch (hud_display_mode) {
+  switch (effective_mode) {
     case HUD_DISPLAY_NONE:
       break;
     case HUD_DISPLAY_MINIMAL:
@@ -131,7 +138,13 @@ void AssignHUDSlots(void) {
   struct speedrun_hud_string *fps = &speedrun_hud_strings.fps;
   struct speedrun_hud_string *aps = &speedrun_hud_strings.aps;
   struct speedrun_hud_string *input_display = &speedrun_hud_strings.input_display;
-  switch (hud_display_mode) {
+  // Use maximal mode when in main menu with non-default optimization mode
+  enum hud_display_mode effective_mode = hud_display_mode;
+  if (menu_maximal_override_active) {
+    effective_mode = HUD_DISPLAY_MAXIMAL;
+  }
+  
+  switch (effective_mode) {
     case HUD_DISPLAY_NONE:
       ClearHUDSlots();
       break;
@@ -210,10 +223,14 @@ void HandleHUDToggle(void) {
       prev_held_srh = false;
   }
 
-  if (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT && OverlayIsLoaded(OGROUP_OVERLAY_1) && hud_display_mode != HUD_DISPLAY_MAXIMAL) {
-    hud_display_mode = HUD_DISPLAY_MAXIMAL;
+  // Temporarily display maximal HUD when in main menu with non-default optimization mode
+  if (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT && OverlayIsLoaded(OGROUP_OVERLAY_1) && !menu_maximal_override_active) {
+    menu_maximal_override_active = true;
     AssignHUDSlots();
-    SaveConfigurations();
+  } else if (menu_maximal_override_active && (GetOptimizationMode() == OPTIMIZATION_MODE_DEFAULT || !OverlayIsLoaded(OGROUP_OVERLAY_1))) {
+    // Restore previous HUD display mode when leaving menu or optimization mode is default
+    menu_maximal_override_active = false;
+    AssignHUDSlots();
   }
 
   // Disallow turning off HUD when fixed RNG is on
