@@ -12,9 +12,7 @@
 #define MONITORING_WINDOW 15
 #define MULTIPLIER_TO_FPS 4
 
-struct play_time prev_frames[MONITORING_WINDOW];
 bool is_prev_frames_filled = false; // Shared resource
-int idx = 0;
 int fps; // Shared resource
 int dungeon_rng_advances = 0;
 int lag_frames = 0;
@@ -52,6 +50,9 @@ void UpdateFPS(void) {
 }
 
 void CalculateFPS(void) {
+  static struct play_time prev_frames[MONITORING_WINDOW];
+  static int idx = 0;
+
   struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
   last_frame = curr_frame;
   curr_frame = igt->frames;

@@ -5,6 +5,7 @@
 #include <pmdsky.h>
 #include <cot.h>
 #include "custom_headers.h"
+#include "fixed_rng.h"
 #include "speedrun_hud.h"
 
 #define INPUT_LEN 10
@@ -13,19 +14,21 @@
 bool fixed_rng = false;
 char base_rng_text[INPUT_LEN + 1];
 uint32_t base_rng_seed;
-
-// Fixed RNG state variables
-uint32_t calls_per_scenario = 0;
-int scenario_prev = -1;
-int level_prev = -1;
+bool lock_rng_advances = false;
 
 // Keyboard menu variables
-char keyboard_default[INPUT_LEN + 1];
 char empty_result[] = "\1";
 
 bool IsFixedRNG() {
   return fixed_rng;
 }
+
+// Fixed RNG state variables (saved to EEPROM)
+struct fixed_rng_state fixed_rng_state = {
+  .calls_per_scenario = 0,
+  .scenario_prev = -1,
+  .level_prev = -1,
+};
 
 // Reset the rng to a state derived from a base seed and the current save progress
 // This can be called by other functions to give deterministic results for
@@ -48,18 +51,24 @@ void ResetRngSeed() {
   
   // We want to advance the RNG if the player does not progress in the game,
   // but we want it to sync up again once they do progress.
-  if (scenario_prev != scenario || level_prev != level) {
-    calls_per_scenario = 0;
+  if (fixed_rng_state.scenario_prev != scenario || fixed_rng_state.level_prev != level) {
+    fixed_rng_state.calls_per_scenario = 0;
   } else {
-    calls_per_scenario++;
+    fixed_rng_state.calls_per_scenario++;
   }
   //Debug_Print0("scenario: %x\n", scenario);
   //Debug_Print0("level: %x\n", level);
-  //Debug_Print0("call per scenario: %x\n", calls_per_scenario);
-  scenario_prev = scenario;
-  level_prev = level;
+  //Debug_Print0("call per scenario: %x\n", fixed_rng_state.calls_per_scenario);
+  fixed_rng_state.scenario_prev = scenario;
+  fixed_rng_state.level_prev = level;
 
-  uint16_t seed = base_rng_seed ^ scenario ^ (level << 5) ^ (calls_per_scenario << 12);
+  // Save to EEPROM whenever the state changes
+  int lock_id = OS_GetLockID();
+  Card_LockBackup(lock_id);
+  Card_WriteAndVerifyEeprom(EEPROM_RNG_STATE_BASE_ADDRESS, &fixed_rng_state, sizeof(fixed_rng_state));
+  Card_UnlockBackup(lock_id);
+
+  uint16_t seed = base_rng_seed ^ scenario ^ (level << 5) ^ (fixed_rng_state.calls_per_scenario << 12);
   //Debug_Print0("seed: %x\n", seed);
   SetRngSeed(seed);
   Rand16Bit();
@@ -75,14 +84,20 @@ __attribute__((used)) void HijackSetDungeonRngPreseedAndResetRngSeed() {
   SetDungeonRngPreseed(preseed);
 }
 
-__attribute__((used)) void HijackGenerateKecleonItems1AndResetRngSeed(enum kecleon_shop_version kecleon_shop_version) {
+__attribute__((used)) void HijackGenerateKecleonItems1AndLockRngAdvances(enum kecleon_shop_version kecleon_shop_version) {
+  lock_rng_advances = true;
   ResetRngSeed();
   GenerateKecleonItems1(kecleon_shop_version);
 }
 
-__attribute__((used)) void HijackGenerateDailyMissionsAndResetRngSeed(void) {
-  ResetRngSeed();
-  GenerateDailyMissions();
+__attribute__((used)) void HijackGenerateKecleonItems2AndUnlockRngAdvances(enum kecleon_shop_version kecleon_shop_version) {
+  GenerateKecleonItems2(kecleon_shop_version);
+  lock_rng_advances = false;
+}
+
+__attribute__((used)) void HijackGenerateCroagunkItemsAndUnlockRngAdvances(enum kecleon_shop_version kecleon_shop_version) {
+  GenerateCroagunkItems();
+  lock_rng_advances = false;
 }
 
 __attribute__((used)) uint32_t HijackRandIntAndResetRngSeed(int high) {
@@ -134,10 +149,18 @@ __attribute__((used)) void SetFixedRNGSeed(char* buffer) {
 // Replace the provided default value in the keyboard with a Rand16Bit() call result
 // or the previously inputted seed
 __attribute__((used)) int ShowKeyboardWithRandomDefaultValue(int message_id, char* buffer, int param_3, char* empty_fallback) {
+  static char keyboard_default[INPUT_LEN + 1];
+
   if (fixed_rng) {
     strncpy(keyboard_default, base_rng_text, INPUT_LEN);
   } else {
     snprintf(keyboard_default, INPUT_LEN, "%d", Rand16Bit());
   }
   return ShowKeyboard(message_id, keyboard_default, param_3, empty_result);
+}
+
+__attribute__((used)) void Rand16BitIfAdvancesNotLocked(void) {
+  if (!lock_rng_advances) {
+    Rand16Bit();
+  }
 }

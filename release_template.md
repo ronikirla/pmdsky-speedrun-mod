@@ -1,11 +1,16 @@
 Insert changelog
 
 See [here](/README.md) for instructions.
+
 TL;DR:
- - **Other** -> **RNG Seed** in the main menu to set up a fixed RNG Seed for racing with other people.
- - **start+select** to toggle HUD modes.
- - **L+start** to switch between file timer and a custom timer that starts from 0.
- - **L+select** to freeze the timer display for 10 seconds, automatically triggered at the end of each dungeon.
+| Combination | Action |
+|--|--|
+| **Start + Select** | Toggle Speedrun HUD (off → minimal → maximal) |
+| **Start + L** | Switch between file timer and a custom timing interval |
+| **Select + L** | Pause timer display for 10 seconds (split time) |
+| **Start + Left/Right** | Switch gameplay mode on title screen (Throttle/Normal/Fast/RNG Viewer) |
+| **L + R + Start + Select** | Soft reset the game (returns to main menu, preserves RNG seed) |
+| **Double tap Start** | Switch between APS counter and idle time display |
 
 ---
 

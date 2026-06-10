@@ -6,6 +6,7 @@ ApplyItemEffectHookAddr = 0x0231C434;
 ApplyItemEffectJumpAddr = 0x0231D574;
 
 /* Add your own symbols here... */
+PLAY_TIME = 0x022ABFD4;
 
 /* !file arm9 */
 ChangeGlobalBorderColor = 0x02027D74;
@@ -37,4 +38,9 @@ CallsChangeThreadPriority = 0x02002628;
 DAT_02003aac = 0x02003aac;
 FUN_0200265c = 0x0200265c;
 
+Cardi_RequestStreamCommand = 0x02083db0;
+Card_LockBackup = 0x02083804;
+Card_UnlockBackup = 0x02083814;
+
+WaitTillVBlank = 0x02003a40;
 OS_SpinWait = 0x0207bbec;

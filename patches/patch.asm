@@ -2,14 +2,31 @@
 .include "symbols.asm"
 
 .open "arm9.bin", arm9_start
+    // Wait until overlay 36 is loaded before running our custom RNG function
+    .org 0x020036b0
+        bl @DelayRand16BitIfAdvancesNotLocked
+    .org 0x020036e0
+        bl @DelayRand16BitIfAdvancesNotLocked
+
+    .org 0x020492b0
+        bl HijackNoteSaveBaseAndSetSaveVariable
+    .org 0x02049508
+        bl HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimePenaltyByTheWay
+    .org 0x02051150
+        b CheckIfShouldIncrementPlayTimer
+
+    .org 0x020662b8
+        bl HijackNoteLoadBaseAndLoadIGT
     // Remove the busy sleep from G3X_Reset since we handle the frame synchronization separately
     // in a way that lets us sometimes skip the wait to squeeze more processing time.
     .org 0x02077c78
         nop
+
     // Trampoline for waiting until overlay 36 is loaded before running our custom version of WaitTillVBlank
     .org 0x02003a40
         b @DelayWaitTillVBlankTrampoline
     @WaitTillVBlank:
+
     // Trampoline to inject custom code to VCount 0 alarm interrupt handler
     .org 0x02003764
         b 0x02094850
@@ -52,7 +69,15 @@
         beq CustomWaitTillVBlank
         stmdb sp!,{r4,lr} // Original instruction
         b @WaitTillVBlank
-        
+    .org 0x02094950
+    @DelayRand16BitIfAdvancesNotLocked:
+        stmdb sp!,{r7}
+        ldr r7, [@delay]
+        cmp r7, 0
+        ldmia sp!,{r7}
+        beq Rand16BitIfAdvancesNotLocked // Custom function
+        b Rand16Bit // Original function
+
     // Overworld HUD drawing
     .org 0x02008f44
         b CustomSetBrightnessExit
@@ -102,6 +127,9 @@
 .open "overlay0.bin", overlay0_start
     .org 0x022beb40
         bl HijackUnloadMenuStateCall
+    // Run the play timer in the main menu
+    .org 0x022bec40
+        bl PlayTimerTickAndWaitTillVBlank
 .close
 
 .open "overlay29.bin", overlay29_start
@@ -167,18 +195,20 @@
     // Main story shop
     .org 0x022e9de8
         // Reset rng before generating Kecleon items.
-        bl HijackGenerateKecleonItems1AndResetRngSeed
-    .org 0x022e9df4
-        bl HijackGenerateDailyMissionsAndResetRngSeed
+        bl HijackGenerateKecleonItems1AndLockRngAdvances
+    .org 0x022e9df8
+        bl HijackGenerateCroagunkItemsAndUnlockRngAdvances
     // Special episode shop
     .org 0x234d2fc
-        bl HijackGenerateKecleonItems1AndResetRngSeed
+        bl HijackGenerateKecleonItems1AndLockRngAdvances
+    .org 0x022e9da0
+        bl HijackGenerateKecleonItems2AndUnlockRngAdvances
     .org 0x022eb150
         bl HijackSetBrightnessNonblockingEntry
     // Increase number of memory blocks in the overlay13 memory arena.
     .org 0x022e912c
         mov r1,#0x37
-    // Fix myserious crash on hardware with the name prompt
+    // Fix mysterious crash on hardware with the name prompt
     .org 0x022e6b98
         bl HijackPlayerNamePromptAndCloseHUD
 .close

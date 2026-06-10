@@ -3,6 +3,7 @@
 #include <pmdsky.h>
 #include <cot.h>
 #include "custom_headers.h"
+#include "eeprom.h"
 #include "hud.h"
 #include "speedrun_hud.h"
 #include "aps.h"
@@ -11,8 +12,6 @@
 
 #define CHAR_WIDTH 6
 #define DEFAULT_COL 10
-
-uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 21, 23, 25, 26, 28, 30, 31, 33, 35, 36, 38, 40, 41, 43, 45, 46, 48, 50, 51, 53, 55, 56, 58, 60, 61, 63, 65, 66, 68, 70, 71, 73, 75, 76, 78, 80, 81, 83, 85, 86, 88, 90, 91, 93, 95, 96, 98};
 
 bool file_timer = true;
 struct play_time start_time;
@@ -59,7 +58,7 @@ __attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int 
 void HandleTimerInput(void) {
   struct held_buttons held_buttons;
   GetHeldButtons(0, (void*) &held_buttons);
-  if (held_buttons.start && held_buttons.l) {
+  if (held_buttons.start && held_buttons.l && !held_buttons.r) {
     if (!prev_held_timer) {
       ResetAPS();
       ResetDungeonRNGAdvances();
@@ -73,8 +72,9 @@ void HandleTimerInput(void) {
         memset(&start_time, 0, sizeof(struct play_time));
         file_timer = true;
       }
+      SaveConfigurations();
     }
-  } else if (held_buttons.select && held_buttons.l) {
+  } else if (held_buttons.select && held_buttons.l && !held_buttons.r) {
     if (!prev_held_timer) {
       prev_held_timer = true;
       ResetSplitRemainingFrames();
@@ -85,10 +85,20 @@ void HandleTimerInput(void) {
 }
 
 void UpdateTimer(void) {
+  static const uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 21, 23, 25, 26, 28, 30, 31, 33, 35, 36, 38, 40, 41, 43, 45, 46, 48, 50, 51, 53, 55, 56, 58, 60, 61, 63, 65, 66, 68, 70, 71, 73, 75, 76, 78, 80, 81, 83, 85, 86, 88, 90, 91, 93, 95, 96, 98};
+
   struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
   // Optimization to avoid all these costly operations during lag
   if (IsLagging()) {
     return;
+  }
+
+  // Detect save file deletion: if IGT dropped below start time, reset the timer
+  if (!file_timer && (igt->seconds < start_time.seconds || 
+      (igt->seconds == start_time.seconds && igt->frames < start_time.frames))) {
+    memset(&start_time, 0, sizeof(struct play_time));
+    file_timer = true;
+    SaveConfigurations();
   }
 
   struct play_time run_igt;

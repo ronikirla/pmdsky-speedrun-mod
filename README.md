@@ -4,9 +4,20 @@
 
   **This mod aims to enhance the experience of speedrunning or racing PMD: Explorers of Sky in various ways. It can also be used for randomizer runs, etc. Since it's different from the vanilla game, separate leaderboards are hosted [here](https://www.speedrun.com/pmdskyext?h=Fast_any-ENG-no_WM-Cutsceneless).**
 
+## Button Shortcuts
+
+| Combination | Action |
+|--|--|
+| **Start + Select** | Toggle Speedrun HUD (off → minimal → maximal) |
+| **Start + L** | Switch between file timer and a custom timing interval |
+| **Select + L** | Pause timer display for 10 seconds (split time) |
+| **Start + Left/Right** | Switch gameplay mode on title screen (Throttle/Normal/Fast/RNG Viewer) |
+| **L + R + Start + Select** | Soft reset the game (returns to main menu, preserves RNG seed) |
+| **Double tap Start** | Switch between APS counter and idle time display |
+
 ## Cutsceneless
 
-Removes all mandatory cutscenes. Brings the run time to around 2 hours at a high level, while staying accurate to timesaves and losses from deaths, shopping, etc. For example, the skippable dinner cutscenes  in vanilla are not removed, you still need to manually skip them by pressing start!
+Removes all mandatory cutscenes. Brings the run time to around 2 hours at a high level, while staying accurate to timesaves and losses from deaths, shopping, etc. For example, the skippable dinner cutscenes in vanilla are not removed, you still need to manually skip them by pressing start!
 
 **Credit:** SBDWolf
   
@@ -22,7 +33,7 @@ Note that fixed seed runs are only leaderboard-eligible if you go into the seed 
 
 ## Speedrun HUD
 
-This is a display for useful supplementary information during a speedrun. This display can be toggled by pressing **start+select**, rotating between three modes: **off**, **minimal** and **maximal**. The HUD is off by default. If you enable RNG Sync, the HUD will always be turned on in order to display the current seed.
+This is a display for useful supplementary information during a speedrun. This display can be toggled by pressing **start+select**, rotating between three modes: **off**, **minimal** and **maximal**. This selection is stored in the save data and kept even when resetting the game. The HUD is off by default. If you enable RNG Sync, the HUD will always be turned on in order to display the current seed.
 
 The information displayed in each mode is described in the table below. The descriptions of the individual components can be found after.
 | Mode | Timer | Seed display | FPS counter | APS counter | Input display |
@@ -52,7 +63,7 @@ The reason for its inclusion is mainly the fact that this game lags a lot while 
 
 Displays your current actions per seconds of idle time. This can be used to measure your movement speed. Pink color indicates that you're currently idle,
 while dark red means that you are missing a pause skip (the game is waiting for a B+A or dpad input to advance). The counter resets at the start of every
-dungeon.
+dungeon. Double tap **start** to switch between the regular APS counter and a direct display of idle time.
 
 ### Input display
 
@@ -60,7 +71,7 @@ Displays the current inputs using in-game icons.
 
 ## Gameplay modes
 
-The hack lets you switch between different gameplay modes in the title screen. This is done using **start+left/right**. The main purpose of these is to let runners on DS flashcards properly emulate the dashing speed for practice as well as letting runners racing on various platforms have an equivalent gameplay experience.
+The hack lets you switch between different gameplay modes in the title screen. This is done using **start+left/right**. This selection is stored in the save data and kept even when resetting the game. The main purpose of these is to let runners on DS flashcards properly emulate the dashing speed for practice as well as letting runners racing on various platforms have an equivalent gameplay experience.
 
 ### Throttle mode
 
@@ -77,6 +88,14 @@ This optimizes the performance of the game by letting it utilize 100% of the fra
 ### RNG viewer mode
 
 This otherwise acts like fast mode, but it replaces the FPS counter during gameplay with an RNG advance counter. Can be reset with **start+L**. This is useful for routing and practicing RNG manipulations.
+
+## Timer changes
+
+Since the in-game timer is supposed to be the main timing method for this game, the mod makes some adjustments to it to make it behave more like RTA in vanilla while still keeping its lag and load removal behaviour. The timer will now run even in the main menu when you are not at the top level of the menu. This means that inputting Wonder Mail codes will count towards your time. Similarly saves will now count towards your time. (The timer is still paused during the save but it will apply a penalty equivalent to the time it takes to save on a retail DS cart.)
+
+## Soft reset
+
+Press **L+R+start+select** to soft reset the game and instantly return to the main menu. Doing this will preserve the selected RNG seed.
 
 ## Known issues
 

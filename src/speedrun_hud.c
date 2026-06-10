@@ -7,6 +7,7 @@
 #include "hud.h"
 #include "fixed_rng.h"
 #include "optimizations.h"
+#include "eeprom.h"
 
 #define TIMER_SLOT_MINIMAL HUD_SLOT_TOP_RIGHT
 #define TIMER_SLOT_MINIMAL_STRING_IDX 0
@@ -26,21 +27,17 @@
 
 #define TIMER_BOTTOM_X_OFFSET 175
 
-enum hud_display_mode {
-  HUD_DISPLAY_NONE = 0,
-  HUD_DISPLAY_MINIMAL = 1,
-  HUD_DISPLAY_MAXIMAL = 2
-};
-
 enum hud_display_mode hud_display_mode = HUD_DISPLAY_NONE;
 
-struct speedrun_hud_string {
+struct speedrun_hud_string
+{
   char string[HUD_LEN];
   uint8_t base_x_offset; // This can be set in here to different values depending on slot
   uint8_t x_offset;      // This gets passed from the HUD component
 };
 
-struct speedrun_hud_strings {
+struct speedrun_hud_strings
+{
   struct speedrun_hud_string timer;
   struct speedrun_hud_string seed;
   struct speedrun_hud_string fps;
@@ -54,16 +51,16 @@ bool prev_held_srh = false;
 bool hud_slot_needs_update[HUD_SLOTS];
 
 // Update the specified speedrun HUD string
-void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_offset) {
-  struct speedrun_hud_string* timer = &speedrun_hud_strings.timer;
-  struct speedrun_hud_string* seed = &speedrun_hud_strings.seed;
-  struct speedrun_hud_string* fps = &speedrun_hud_strings.fps;
-  struct speedrun_hud_string* aps = &speedrun_hud_strings.aps;
-  struct speedrun_hud_string* input_display = &speedrun_hud_strings.input_display;
-  char* loc;
+void UpdateHUDString(enum speedrun_hud_string_type shst, char *str, uint8_t x_offset) {
+  struct speedrun_hud_string *timer = &speedrun_hud_strings.timer;
+  struct speedrun_hud_string *seed = &speedrun_hud_strings.seed;
+  struct speedrun_hud_string *fps = &speedrun_hud_strings.fps;
+  struct speedrun_hud_string *aps = &speedrun_hud_strings.aps;
+  struct speedrun_hud_string *input_display = &speedrun_hud_strings.input_display;
+  char *loc;
   enum hud_slot slot_minimal;
   enum hud_slot slot_maximal;
-  switch(shst) {
+  switch (shst) {
     case SPEEDRUN_HUD_TIMER:
       loc = timer->string;
       timer->x_offset = x_offset + timer->base_x_offset;
@@ -99,7 +96,7 @@ void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_of
   }
   strncpy(loc, str, HUD_LEN);
   // Update the HUD slot that corresponds to the currently active mode
-  switch(hud_display_mode) {
+  switch (hud_display_mode) {
     case HUD_DISPLAY_NONE:
       break;
     case HUD_DISPLAY_MINIMAL:
@@ -122,19 +119,19 @@ void UpdateHUDSlots(void) {
   for (int i = 0; i < HUD_SLOTS; i++) {
     if (hud_slot_needs_update[i]) {
       hud_slot_needs_update[i] = false;
-      UpdateHUD((enum hud_slot) i);
+      UpdateHUD((enum hud_slot)i);
     }
   }
 }
 
 // Assign the string pointers to all the necessary HUD slots depending on the current mode
 void AssignHUDSlots(void) {
-  struct speedrun_hud_string* timer = &speedrun_hud_strings.timer;
-  struct speedrun_hud_string* seed = &speedrun_hud_strings.seed;
-  struct speedrun_hud_string* fps = &speedrun_hud_strings.fps;
-  struct speedrun_hud_string* aps = &speedrun_hud_strings.aps;
-  struct speedrun_hud_string* input_display = &speedrun_hud_strings.input_display;
-  switch(hud_display_mode) {
+  struct speedrun_hud_string *timer = &speedrun_hud_strings.timer;
+  struct speedrun_hud_string *seed = &speedrun_hud_strings.seed;
+  struct speedrun_hud_string *fps = &speedrun_hud_strings.fps;
+  struct speedrun_hud_string *aps = &speedrun_hud_strings.aps;
+  struct speedrun_hud_string *input_display = &speedrun_hud_strings.input_display;
+  switch (hud_display_mode) {
     case HUD_DISPLAY_NONE:
       ClearHUDSlots();
       break;
@@ -180,17 +177,18 @@ void AssignHUDSlots(void) {
                     input_display->string,
                     &input_display->x_offset);
       break;
+      default:
   }
 }
 
 // Read inputs to switch between HUD modes
 void HandleHUDToggle(void) {
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (void*) &held_buttons);
-  if (held_buttons.start && held_buttons.select) {
+  GetHeldButtons(0, (void *)&held_buttons);
+  if (held_buttons.start && held_buttons.select && !held_buttons.r) {
     if (!prev_held_srh) {
       prev_held_srh = true;
-      switch(hud_display_mode) {
+      switch (hud_display_mode) {
         case HUD_DISPLAY_NONE:
           hud_display_mode = HUD_DISPLAY_MINIMAL;
           break;
@@ -204,8 +202,10 @@ void HandleHUDToggle(void) {
           break;
       }
       AssignHUDSlots();
+      SaveConfigurations();
     }
-  } else {
+  }
+  else {
     if (prev_held_srh)
       prev_held_srh = false;
   }
@@ -213,11 +213,13 @@ void HandleHUDToggle(void) {
   if (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT && OverlayIsLoaded(OGROUP_OVERLAY_1) && hud_display_mode != HUD_DISPLAY_MAXIMAL) {
     hud_display_mode = HUD_DISPLAY_MAXIMAL;
     AssignHUDSlots();
+    SaveConfigurations();
   }
 
   // Disallow turning off HUD when fixed RNG is on
   if (IsFixedRNG() && hud_display_mode == HUD_DISPLAY_NONE) {
     hud_display_mode = HUD_DISPLAY_MINIMAL;
     AssignHUDSlots();
+    SaveConfigurations();
   }
 }
