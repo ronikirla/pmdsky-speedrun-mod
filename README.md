@@ -10,8 +10,8 @@
 |--|--|
 | **Start + Select** | Toggle Speedrun HUD (off → minimal → maximal) |
 | **Start + L** | Switch between file timer and a custom timing interval |
-| **Select + L** | Pause timer display for 10 seconds (split time) |
-| **Start + Left/Right** | Switch gameplay mode on title screen (Throttle/Normal/Fast/RNG Viewer) |
+| **Select + L** | Pause timer display for 10 seconds (show split time) |
+| **Start + Left/Right** | Switch optimization mode on main menu (Throttle/Normal/Fast/RNG Viewer) |
 | **L + R + Start + Select** | Soft reset the game (returns to main menu, preserves RNG seed) |
 | **Double tap Start** | Switch between APS counter and idle time display |
 
