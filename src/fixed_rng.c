@@ -7,6 +7,7 @@
 #include "custom_headers.h"
 #include "fixed_rng.h"
 #include "speedrun_hud.h"
+#include "eeprom.h"
 
 #define INPUT_LEN 10
 
@@ -63,7 +64,7 @@ void ResetRngSeed() {
   fixed_rng_state.level_prev = level;
 
   // Save to EEPROM whenever the state changes
-  int lock_id = OS_GetLockID();
+  int lock_id = GetEepromLockId();
   Card_LockBackup(lock_id);
   Card_WriteAndVerifyEeprom(EEPROM_RNG_STATE_BASE_ADDRESS, &fixed_rng_state, sizeof(fixed_rng_state));
   Card_UnlockBackup(lock_id);

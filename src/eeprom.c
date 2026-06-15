@@ -7,14 +7,21 @@
 #include "timer.h"
 #include "aps.h"
 
-struct eeprom_timer eeprom_timer;
-struct eeprom_configurations eeprom_configurations;
+static struct eeprom_timer eeprom_timer;
+static struct eeprom_configurations eeprom_configurations;
 #define EEPROM_TIMER_BASE_ADDRESS 0xb65c
 #define EEPROM_CONFIGURATIONS_BASE_ADDRESS 0xb670
 #define EEPROM_RNG_SEED_BASE_ADDRESS 0xb690
 
-bool igt_loaded = false;
-int eeprom_lock_id;
+static bool igt_loaded = false;
+static int eeprom_lock_id = -3;
+
+int GetEepromLockId(void) {
+  if (eeprom_lock_id == -3) {
+    eeprom_lock_id = OS_GetLockID();
+  }
+  return eeprom_lock_id;
+}
 
 void SaveIGT(void) {
   if (!igt_loaded) {
@@ -47,7 +54,7 @@ void SaveRNGSeedForSoftReset(void) {
   char rng_seed_save[RNG_INPUT_LEN + 1];
   memcpy(rng_seed_save, base_rng_text, RNG_INPUT_LEN + 1);
 
-  int lock_id = OS_GetLockID();
+  int lock_id = GetEepromLockId();
   Card_LockBackup(lock_id);
   Card_WriteAndVerifyEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, rng_seed_save, RNG_INPUT_LEN + 1);
   Card_UnlockBackup(lock_id);
@@ -60,7 +67,7 @@ void SaveConfigurations(void) {
   eeprom_configurations.SRAM_start_time = start_time;
   eeprom_configurations.SRAM_show_idle_seconds = GetShowIdleSeconds();
 
-  eeprom_lock_id = OS_GetLockID();
+  eeprom_lock_id = GetEepromLockId();
 
   Card_LockBackup(eeprom_lock_id);
   Card_WriteAndVerifyEeprom(EEPROM_CONFIGURATIONS_BASE_ADDRESS, &eeprom_configurations, sizeof(eeprom_configurations));
@@ -68,7 +75,7 @@ void SaveConfigurations(void) {
 }
 
 void LoadIGTAndConfigurations(void) {
-  eeprom_lock_id = OS_GetLockID();
+  eeprom_lock_id = GetEepromLockId();
 
   Card_LockBackup(eeprom_lock_id);
   // Read index

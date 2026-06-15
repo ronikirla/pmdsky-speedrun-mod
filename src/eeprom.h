@@ -30,3 +30,4 @@ void LoadIGT(void);
 void SaveConfigurations(void);
 void LoadIGTAndConfigurations(void);
 void SaveRNGSeedForSoftReset(void);
+int GetEepromLockId(void);
