@@ -9,6 +9,8 @@
 
 static struct eeprom_timer eeprom_timer;
 static struct eeprom_configurations eeprom_configurations;
+#define EEPROM_MAGIC_ADDRESS 0x67f0
+#define EEPROM_MAGIC 0x67
 #define EEPROM_TIMER_BASE_ADDRESS 0xb65c
 #define EEPROM_CONFIGURATIONS_BASE_ADDRESS 0xb670
 #define EEPROM_RNG_SEED_BASE_ADDRESS 0xb690
@@ -78,11 +80,19 @@ void LoadIGTAndConfigurations(void) {
   eeprom_lock_id = GetEepromLockId();
 
   Card_LockBackup(eeprom_lock_id);
-  // Read index
-  Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS, &eeprom_timer.index, 1);
-  if (eeprom_timer.index == 0xFF) {
+  uint8_t magic;
+  Card_ReadEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
+  if (magic != EEPROM_MAGIC) {
+    SaveIGT();
+    SaveConfigurations();
+    magic = EEPROM_MAGIC;
+    Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
     goto CLEANUP;
   }
+
+  // Read index
+  Card_ReadEeprom(EEPROM_TIMER_BASE_ADDRESS, &eeprom_timer.index, 1);
+
   // Read Configurations
   Card_ReadEeprom(EEPROM_CONFIGURATIONS_BASE_ADDRESS, &eeprom_configurations, sizeof(eeprom_configurations));
 
@@ -116,10 +126,6 @@ void LoadIGTAndConfigurations(void) {
   }
   if (has_rng_seed) {
     SetFixedRNGSeed(rng_seed_loaded);
-    // Clear the seed from EEPROM so hard resets don't restore it
-    char empty_seed[RNG_INPUT_LEN + 1];
-    memset(empty_seed, 0xFF, RNG_INPUT_LEN + 1);
-    Card_WriteAndVerifyEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, empty_seed, RNG_INPUT_LEN + 1);
   }
 
   // Need to update the HUD slot that corresponds to the currently active mode here too, or else it won't graphically show up
@@ -141,6 +147,11 @@ void LoadIGTAndConfigurations(void) {
   Card_ReadEeprom(EEPROM_RNG_STATE_BASE_ADDRESS, &fixed_rng_state, sizeof(fixed_rng_state));
 
 CLEANUP:
+  // Clear the seed from EEPROM so hard resets don't restore it
+  char empty_seed[RNG_INPUT_LEN + 1];
+  memset(empty_seed, 0xFF, RNG_INPUT_LEN + 1);
+  Card_WriteAndVerifyEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, empty_seed, RNG_INPUT_LEN + 1);
+  
   Card_UnlockBackup(eeprom_lock_id);
   igt_loaded = true;
 }
