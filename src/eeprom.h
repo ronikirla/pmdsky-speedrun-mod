@@ -25,7 +25,7 @@ struct eeprom_configurations
   bool SRAM_show_idle_seconds;
 };
 
-void SaveIGT(void);
+void SaveIGT(bool o30_check);
 void LoadIGT(void);
 void SaveConfigurations(void);
 void LoadIGTAndConfigurations(void);

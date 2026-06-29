@@ -9,7 +9,7 @@
 
 static struct eeprom_timer eeprom_timer;
 static struct eeprom_configurations eeprom_configurations;
-#define EEPROM_MAGIC_ADDRESS 0x67f0
+#define EEPROM_MAGIC_ADDRESS 0xc7f0
 #define EEPROM_MAGIC 0x67
 #define EEPROM_TIMER_BASE_ADDRESS 0xb65c
 #define EEPROM_CONFIGURATIONS_BASE_ADDRESS 0xb670
@@ -25,8 +25,8 @@ int GetEepromLockId(void) {
   return eeprom_lock_id;
 }
 
-void SaveIGT(void) {
-  if (!igt_loaded) {
+void SaveIGT(bool o30_check) {
+  if (!igt_loaded || (o30_check && OverlayIsLoaded(OGROUP_OVERLAY_30))) {
     return;
   }
   int eeprom_offset = 0x0;
@@ -83,7 +83,7 @@ void LoadIGTAndConfigurations(void) {
   uint8_t magic;
   Card_ReadEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
   if (magic != EEPROM_MAGIC) {
-    SaveIGT();
+    SaveIGT(true);
     SaveConfigurations();
     magic = EEPROM_MAGIC;
     Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));

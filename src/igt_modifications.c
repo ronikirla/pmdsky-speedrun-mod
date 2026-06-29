@@ -2,6 +2,7 @@
 #include <cot.h>
 #include "custom_headers.h"
 #include "timer.h"
+#include "eeprom.h"
 
 bool is_saving = false;
 bool just_finished_run = false;
@@ -87,6 +88,7 @@ __attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimeP
   is_saving = false;
 
   AddTimePenalty(&PLAY_TIME, 200);
+  SaveIGT(false);
   MemFree(whatever_this_was);
   return;
 }
