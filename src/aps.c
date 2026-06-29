@@ -175,7 +175,6 @@ void UpdateAPS(void) {
   char aps_color[HUD_LEN] = "";
 
   if (in_dungeon) {
-    // Note that we are making an assumption here that there is always enough time to run the routine while we are idle
     if (aps.message_log_pause) {
       aps.idle_time++;
       strncat(aps_color, PAUSE_SKIP_COLOR_TAG, HUD_LEN);

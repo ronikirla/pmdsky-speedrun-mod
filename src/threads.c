@@ -42,12 +42,13 @@ __attribute__((used)) void WakeupThreads(void) {
 }
 
 // High priority routine to perform every frame on VCount 0.
-// Currently just keeps track of the FPS.
+// Currently just keeps track of the FPS and APS.
 // Remember thread safety! When writing to a shared resource,
 // see what could happen in other threads
 void VCount0Routine(void*) {
   while(true) {
     CalculateFPS();
+    UpdateAPS();
     OS_SleepThread(NULL);
   }
 }
@@ -63,10 +64,9 @@ void MainRoutine(void*) {
     HandleAPSInput();
     UpdateTimer();
     UpdateFPS();
-    UpdateAPS();
     UpdateInputDisplay();
     UpdateHUDSlots();
-    SaveIGT();
+    SaveIGT(true);
     OS_SleepThread(NULL);
   }
 }
