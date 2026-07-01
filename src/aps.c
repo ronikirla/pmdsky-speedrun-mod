@@ -127,8 +127,9 @@ void HandleAPSInput(void) {
 
 void UpdateAPS(void) {
   static bool was_in_dungeon = false;
+  bool in_dungeon = OverlayIsLoaded(OGROUP_OVERLAY_29);
 
-  if (!DUNGEON_PTR_MASTER && !OverlayIsLoaded(OGROUP_OVERLAY_1)) {
+  if (!DUNGEON_PTR_MASTER && in_dungeon) {
     return;
   }
 
@@ -138,8 +139,6 @@ void UpdateAPS(void) {
     // but in reality this just turns it negative, which is also less than or equal to 0
     current_aps_split.remaining_frames--;
   }
-
-  bool in_dungeon = OverlayIsLoaded(OGROUP_OVERLAY_29);
 
   // Detect dungeon exit: back up values and reset immediately
   if (was_in_dungeon && !in_dungeon) {
