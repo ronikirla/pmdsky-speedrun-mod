@@ -13,7 +13,7 @@ bool prev_held_opt = false;
 
 // In the main menu, let the player choose the level of optimization used during gameplay
 void HandleSpeedToggle(void) {
-  if (IsLagging() || !OverlayIsLoaded(OGROUP_OVERLAY_1)) {
+  if (!OverlayIsLoaded(OGROUP_OVERLAY_1)) {
     return;
   }
 
@@ -101,7 +101,7 @@ __attribute__((used)) bool CustomWaitTillVBlank(void) {
 __attribute__((used)) void SkipAICardRead(int string_id, struct entity *entity) {
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_THROTTLE:
-      OS_SpinWait(OS_MilliSecondsToTicks(1) * (64 * 2));
+      OS_SpinWait(OS_MilliSecondsToTicks(1) * (64 * 2)); // TODO: increase a bit, also figure out why the low prio thread seemingly never finishes if theres not enough time
       return;
     case OPTIMIZATION_MODE_DEFAULT:
       SubstitutePlaceholderStringTags(0, entity, 0);

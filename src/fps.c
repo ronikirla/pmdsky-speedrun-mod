@@ -24,9 +24,6 @@ bool IsLagging() {
 }
 
 void UpdateFPS(void) {
-  if (IsLagging()) {
-    return;
-  }
   // This never gets changed back to false so it's thread safe
   if (is_prev_frames_filled) {
     char fps_string[HUD_LEN];
@@ -56,9 +53,11 @@ void CalculateFPS(void) {
   struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
   last_frame = curr_frame;
   curr_frame = igt->frames;
+  #ifdef LAG_TEST
   if (IsLagging()) {
     lag_frames++;
   }
+  #endif
   if (is_prev_frames_filled) {
     fps = IGTDifferenceFrames(igt, &prev_frames[idx]) * MULTIPLIER_TO_FPS;
   } else {
@@ -76,5 +75,7 @@ __attribute__((used)) void LogDungeonRand16Bit() {
 
 void ResetDungeonRNGAdvances(void) {
   dungeon_rng_advances = 0;
+  #ifdef LAG_TEST
   lag_frames = 0;
+  #endif
 }

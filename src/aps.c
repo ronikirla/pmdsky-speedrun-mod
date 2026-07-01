@@ -128,7 +128,7 @@ void HandleAPSInput(void) {
 void UpdateAPS(void) {
   static bool was_in_dungeon = false;
 
-  if (IsLagging()) {
+  if (!DUNGEON_PTR_MASTER && !OverlayIsLoaded(OGROUP_OVERLAY_1)) {
     return;
   }
 
