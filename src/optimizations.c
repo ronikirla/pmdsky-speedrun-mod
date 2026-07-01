@@ -8,6 +8,8 @@
 #include "fps.h"
 #include "eeprom.h"
 
+#define THROTTLE_CYCLES 145000
+
 enum optimization_mode optimization_mode = OPTIMIZATION_MODE_DEFAULT; // Shared resource, but only gets written to in main menu
 bool prev_held_opt = false;
 
@@ -101,7 +103,7 @@ __attribute__((used)) bool CustomWaitTillVBlank(void) {
 __attribute__((used)) void SkipAICardRead(int string_id, struct entity *entity) {
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_THROTTLE:
-      OS_SpinWait(OS_MilliSecondsToTicks(1) * (64 * 2)); // TODO: increase a bit, also figure out why the low prio thread seemingly never finishes if theres not enough time
+      OS_SpinWait(THROTTLE_CYCLES);
       return;
     case OPTIMIZATION_MODE_DEFAULT:
       SubstitutePlaceholderStringTags(0, entity, 0);
