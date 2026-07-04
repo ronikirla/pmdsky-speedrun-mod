@@ -33,6 +33,9 @@ bool show_idle_seconds = false;
 
 struct aps_split current_aps_split;
 
+// Scuffed ram search for whether menu is open
+const int* menu_open_aps = (int*) 0x20afad0;
+
 void ResetAPS(void) {
   aps.idle_time = 1;
   aps.actions = 0;
@@ -168,18 +171,12 @@ void UpdateAPS(void) {
     display_actions = current_aps_split.actions;
   }
 
-  // Scuffed ram search for whether menu is open
-  int* menu_open_aps = (int*) 0x20afad0;
-
   char aps_color[HUD_LEN] = "";
 
   if (in_dungeon) {
     if (aps.message_log_pause) {
-      aps.idle_time++;
       strncat(aps_color, PAUSE_SKIP_COLOR_TAG, HUD_LEN);
     } else if (DUNGEON_PTR_MASTER->no_action_in_progress && *menu_open_aps == 0 && GetLeaderAction()->val == ACTION_NOTHING) {
-      aps.prev_action = ACTION_NOTHING;
-      aps.idle_time++;
       strncat(aps_color, IDLE_COLOR_TAG, HUD_LEN);
     }
   } else {
@@ -210,4 +207,21 @@ void UpdateAPS(void) {
   }
 
   UpdateHUDString(SPEEDRUN_HUD_APS, aps_string, OFFSET);
+}
+
+void UpdateAPSIdleTime(void) {
+  bool in_dungeon = OverlayIsLoaded(OGROUP_OVERLAY_29);
+
+  if (!DUNGEON_PTR_MASTER && in_dungeon) {
+    return;
+  }
+
+  if (in_dungeon) {
+    if (aps.message_log_pause) {
+      aps.idle_time++;
+    } else if (DUNGEON_PTR_MASTER->no_action_in_progress && *menu_open_aps == 0 && GetLeaderAction()->val == ACTION_NOTHING) {
+      aps.prev_action = ACTION_NOTHING;
+      aps.idle_time++;
+    }
+  }
 }

@@ -2,6 +2,7 @@
 #include "hud.h"
 
 void UpdateAPS(void);
+void UpdateAPSIdleTime(void);
 void HandleAPSInput(void);
 void ResetAPS(void);
 void ResetAPSRemainingFrames(void);
