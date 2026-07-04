@@ -8,7 +8,8 @@
 #include "fps.h"
 #include "eeprom.h"
 
-#define THROTTLE_CYCLES 145000
+#define THROTTLE_CYCLES_DS  100000
+#define THROTTLE_CYCLES_EMU 145000
 
 enum optimization_mode optimization_mode = OPTIMIZATION_MODE_DEFAULT; // Shared resource, but only gets written to in main menu
 bool prev_held_opt = false;
@@ -37,7 +38,7 @@ void HandleSpeedToggle(void) {
     }
 
     prev_held_opt = true;
-    optimization_mode = (optimization_mode + direction + 4) % 4;
+    optimization_mode = (optimization_mode + direction + 5) % 5;
 
     SaveConfigurations();
 
@@ -54,7 +55,7 @@ enum optimization_mode GetOptimizationMode() {
 char *GetOptimizationModeString(void) {
   if (GetCurrentAPSSplit()->remaining_frames > 0)
     return "";
-  char *optimization_mode_strings[] = {"Throttle mode", "Normal mode", "Fast mode", "RNG viewer mode"};
+  char *optimization_mode_strings[] = {"Throttle mode emu", "Throttle mode DS", "Normal mode", "Fast mode", "RNG viewer mode"};
   return optimization_mode_strings[optimization_mode];
 }
 
@@ -102,8 +103,11 @@ __attribute__((used)) bool CustomWaitTillVBlank(void) {
 // platform-independent amount of lag
 __attribute__((used)) void SkipAICardRead(int string_id, struct entity *entity) {
   switch (optimization_mode) {
-    case OPTIMIZATION_MODE_THROTTLE:
-      OS_SpinWait(THROTTLE_CYCLES);
+    case OPTIMIZATION_MODE_THROTTLE_EMU:
+      OS_SpinWait(THROTTLE_CYCLES_EMU);
+      return;
+    case OPTIMIZATION_MODE_THROTTLE_DS:
+      OS_SpinWait(THROTTLE_CYCLES_DS);
       return;
     case OPTIMIZATION_MODE_DEFAULT:
       SubstitutePlaceholderStringTags(0, entity, 0);
@@ -117,7 +121,8 @@ __attribute__((used)) void SubstitutePlaceholderStringTagsAndLogMessageByIdWithP
     struct entity *entity, int message_id) {
   // If we optimized the card read out, we need to still perform it when it's actually necessary
   switch (optimization_mode) {
-    case OPTIMIZATION_MODE_THROTTLE:
+    case OPTIMIZATION_MODE_THROTTLE_EMU:
+    case OPTIMIZATION_MODE_THROTTLE_DS:
     case OPTIMIZATION_MODE_FAST:
     case OPTIMIZATION_MODE_RNG_VIEWER:
       SubstitutePlaceholderStringTags(0, entity, 0);
