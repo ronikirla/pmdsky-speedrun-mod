@@ -75,7 +75,7 @@ The hack lets you switch between different gameplay modes in the title screen. T
 
 ### Throttle mode
 
-This emulates the dashing speed of real hardware. It replaces game card reads during AI calculation with fixed duration sleeps.
+This emulates the dashing speed of real hardware. It replaces game card reads during AI calculation with fixed duration sleeps. There are two variants of this available: DS and emu. They are small calibrations for their respective platforms for maximum accuracy, so choose whichever platform you are playing on.
 
 ### Normal mode
 
