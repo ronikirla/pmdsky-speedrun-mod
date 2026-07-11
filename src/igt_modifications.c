@@ -20,7 +20,8 @@ __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
   if (is_paused) {
     // Timer is paused - count frames
     frames_paused++;
-    was_paused = true;
+    // If play time is 0 then we selected new game, skip resume delay
+    if (PLAY_TIME_SECONDS != 0) was_paused = true;
     resume_delay_remaining = 0;
   } else if (was_paused && resume_delay_remaining == 0) {
     // Transition from paused to running - calculate and set resume delay
@@ -29,17 +30,13 @@ __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
     if (delay < 10) delay = 10;
     resume_delay_remaining = delay;
     frames_paused = 0;
+    was_paused = false;
+    just_finished_run = false;
     // Don't advance timer yet - still in delay period
   } else if (resume_delay_remaining > 0) {
     // Still in resume delay period
     resume_delay_remaining--;
-    if (resume_delay_remaining == 0) {
-      // Delay expired - now actually resume
-      was_paused = false;
-      just_finished_run = false;
-    }
   } else if (!just_finished_run) {
-    was_paused = false;
     struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
     // Set start time to current igt if we reset the timer in the menu
     bool advance_start_time = false;
