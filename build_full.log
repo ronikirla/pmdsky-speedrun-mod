@@ -1,0 +1,5 @@
+make[1]: '/c/Users/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/out.bin' is up to date.
+python scripts/patch.py EU rom.nds /c/Users/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/out.bin /c/Users/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/out.elf out.nds
+Applying binary patch: patches\internal.asm
+Applying binary patch: patches\patch.asm
+BUILD_EXIT=0

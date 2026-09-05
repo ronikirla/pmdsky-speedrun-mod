@@ -8,6 +8,7 @@
 #include "fixed_rng.h"
 #include "optimizations.h"
 #include "eeprom.h"
+#include "uplink.h"
 
 #define TIMER_SLOT_MINIMAL HUD_SLOT_TOP_RIGHT
 #define TIMER_SLOT_MINIMAL_STRING_IDX 0
@@ -223,12 +224,17 @@ void HandleHUDToggle(void) {
       prev_held_srh = false;
   }
 
-  // Temporarily display maximal HUD when in main menu with non-default optimization mode
-  if (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT && OverlayIsLoaded(OGROUP_OVERLAY_1) && !menu_maximal_override_active) {
+  // Temporarily display maximal HUD when in the main menu with a non-default
+  // optimization mode or with the DSpico uplink enabled (so the USB status
+  // line is visible regardless of the user's HUD display mode)
+  bool want_menu_override = OverlayIsLoaded(OGROUP_OVERLAY_1) &&
+    (GetOptimizationMode() != OPTIMIZATION_MODE_DEFAULT || UplinkIsEnabled());
+  if (want_menu_override && !menu_maximal_override_active) {
     menu_maximal_override_active = true;
     AssignHUDSlots();
-  } else if (menu_maximal_override_active && (GetOptimizationMode() == OPTIMIZATION_MODE_DEFAULT || !OverlayIsLoaded(OGROUP_OVERLAY_1))) {
-    // Restore previous HUD display mode when leaving menu or optimization mode is default
+  } else if (menu_maximal_override_active && !want_menu_override) {
+    // Restore previous HUD display mode when leaving menu or the optimization
+    // mode is default and the uplink is disabled
     menu_maximal_override_active = false;
     AssignHUDSlots();
   }

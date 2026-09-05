@@ -84,6 +84,13 @@ static inline bool Card_ReadEeprom(uint32_t src, void* dst, uint32_t len) {
 void Card_LockBackup(uint16_t lock_id);
 void Card_UnlockBackup(uint16_t lock_id);
 
+// ROM-interface (MCCNT1 / MCD1) lock. Used by the DSpico uplink (src/uplink.c)
+// to serialize its card commands against the game's DLDI ROM reads. The
+// backup lock above guards EEPROM/SRAM (MCCNT2/MCD2) and is NOT the right lock
+// for ROM-interface operations.
+void Card_LockRom(uint16_t lock_id);
+void Card_UnlockRom(uint16_t lock_id);
+
 int OS_GetLockID(void);
 
 uint8_t WaitTillVBlank(void);

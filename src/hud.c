@@ -147,7 +147,10 @@ bool simple_menu_open;
 // Having any windows open while a simple menu is open
 // causes the prompts to not be able to be buffered. Therefore, we want to be able to close
 // the HUD to prevent that from happening.
-__attribute__((naked)) int HijackCreateSimpleMenuAndCloseHUD(void) {
+// All of these Hijack* trampolines are only referenced from patches/*.asm
+// (not from any C code), so they need "used" to survive LTO dead-code
+// elimination -- the patcher resolves them from the nm output of out.elf.
+__attribute__((used, naked)) int HijackCreateSimpleMenuAndCloseHUD(void) {
   asm("stmdb sp!,{r0-r12,lr}");
   simple_menu_open = true;
   asm("ldmia sp!,{r0-r12,lr}");
@@ -155,7 +158,7 @@ __attribute__((naked)) int HijackCreateSimpleMenuAndCloseHUD(void) {
   asm("bx lr");
 }
 
-__attribute__((naked)) int HijackCloseSimpleMenuAndCreateHUD(void) {
+__attribute__((used, naked)) int HijackCloseSimpleMenuAndCreateHUD(void) {
   asm("stmdb sp!,{r0-r12}");
   simple_menu_open = false;
   asm("ldmia sp!,{r0-r12}");
@@ -171,7 +174,7 @@ void SubSetBrightnessNonblockingEntry(int brightness) {
 }
 
 // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
-__attribute__((naked)) void HijackSetBrightnessNonblockingEntry(int brightness) {
+__attribute__((used, naked)) void HijackSetBrightnessNonblockingEntry(int brightness) {
   asm("stmdb sp!,{r0-r12,lr}");
   SubSetBrightnessNonblockingEntry(brightness);
   asm("ldmia sp!,{r0-r12,lr}");
@@ -182,7 +185,7 @@ __attribute__((naked)) void HijackSetBrightnessNonblockingEntry(int brightness) 
 bool menu_open;
 bool name_prompt_fix;
 
-__attribute__((naked)) void HijackOpenMenuRoutine(void) {
+__attribute__((used, naked)) void HijackOpenMenuRoutine(void) {
   asm("stmdb sp!,{r0-r12,lr}");
   menu_open = true;
   asm("ldmia sp!,{r0-r12,lr}");
@@ -190,7 +193,7 @@ __attribute__((naked)) void HijackOpenMenuRoutine(void) {
   asm("bx lr");
 }
 
-__attribute__((naked)) void HijackCloseMenuRoutine(void) {
+__attribute__((used, naked)) void HijackCloseMenuRoutine(void) {
   asm("stmdb sp!,{r0-r12,lr}");
   menu_open = false;
   name_prompt_fix = false;
@@ -243,7 +246,7 @@ void HandleTooManyWindows(int open) {
   }
 }
 
-__attribute__((naked)) void HijackNewWindowScreenCheckAndCheckOpenWindows(void) {
+__attribute__((used, naked)) void HijackNewWindowScreenCheckAndCheckOpenWindows(void) {
   asm("stmdb sp!,{r0-r12,lr}");
   int open = GetNofOpenWindows();
   HandleTooManyWindows(open);
@@ -252,7 +255,7 @@ __attribute__((naked)) void HijackNewWindowScreenCheckAndCheckOpenWindows(void) 
   asm("bx lr");
 }
 
-__attribute__((naked)) void HijackDeleteWindowAndCheckOpenWindows(void) {
+__attribute__((used, naked)) void HijackDeleteWindowAndCheckOpenWindows(void) {
   asm("strb r0,[r4,#0xb6]");
   asm("stmdb sp!,{r0-r12,lr}");
   int open = GetNofOpenWindows();
@@ -265,7 +268,7 @@ __attribute__((naked)) void HijackDeleteWindowAndCheckOpenWindows(void) {
 // "no" to confirming the team name in the guild. This code however doesn't
 // handle the top screen controls chart creation properly. It happens to
 // work in the vanilla game but causes corruption with extra windows open.
-__attribute__((naked)) void HijackTeamNamePromptConfirm(void) {
+__attribute__((used, naked)) void HijackTeamNamePromptConfirm(void) {
   asm("stmdb sp!,{r0-r12,lr}");
   CloseHUD(HUD_SLOT_TOP_LEFT);
   CloseHUD(HUD_SLOT_TOP_RIGHT);

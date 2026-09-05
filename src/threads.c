@@ -11,6 +11,7 @@
 #include "optimizations.h"
 #include "eeprom.h"
 #include "soft_reset.h"
+#include "uplink.h"
 
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_2KB 1024 * 2
@@ -68,6 +69,8 @@ void MainRoutine(void*) {
     UpdateInputDisplay();
     UpdateHUDSlots();
     SaveIGT(true);
+    HandleUplinkToggle();
+    UplinkTick();
     OS_SleepThread(NULL);
   }
 }

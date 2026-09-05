@@ -8,6 +8,7 @@
 #include "hud.h"
 #include "speedrun_hud.h"
 #include "optimizations.h"
+#include "uplink.h"
 
 #define MONITORING_WINDOW 15
 #define MULTIPLIER_TO_FPS 4
@@ -29,7 +30,12 @@ void UpdateFPS(void) {
     char fps_string[HUD_LEN];
     // In the main menu, instead of printing FPS we print the optimization mode
     if (OverlayIsLoaded(OGROUP_OVERLAY_1)) {
-      snprintf(fps_string, HUD_LEN, GetOptimizationModeString()); 
+      const char* usb_status = UplinkStatusString();
+      if (usb_status) {
+        snprintf(fps_string, HUD_LEN, "%s | USB:%s", GetOptimizationModeString(), usb_status);
+      } else {
+        snprintf(fps_string, HUD_LEN, GetOptimizationModeString());
+      }
     } else {
       if (GetOptimizationMode() == OPTIMIZATION_MODE_RNG_VIEWER && OverlayIsLoaded(OGROUP_OVERLAY_29)) {
         snprintf(fps_string, HUD_LEN, "%d", dungeon_rng_advances); 

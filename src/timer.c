@@ -9,9 +9,16 @@
 #include "aps.h"
 #include "timer.h"
 #include "fps.h"
+#include "uplink.h"
 
 #define CHAR_WIDTH 6
 #define DEFAULT_COL 10
+
+// TEMPORARY (revert by setting to 0): hide the bottom-slot timer while the
+// uplink is enumerating so the long "USB:ENUM w... l... x..." diagnostic
+// line is readable. The timer returns automatically once enumeration leaves
+// UP_STATE_ENUM, or immediately when this flag is set to 0.
+#define UPLINK_HIDE_TIMER_WHILE_ENUM 1
 
 bool file_timer = true;
 struct play_time start_time;
@@ -132,7 +139,13 @@ void UpdateTimer(void) {
     current_split.x_offset = x_offset;
   }
 
-  if (current_split_remaining_frames_local > 0) {
+  if (UPLINK_HIDE_TIMER_WHILE_ENUM && UplinkIsEnumerating()) {
+    // TEMPORARY: hide the timer while the uplink is enumerating so the long
+    // "USB:ENUM ..." diagnostic line is readable (revert via the flag above).
+    // The split counter is still decremented so split timing is preserved.
+    UpdateHUDString(SPEEDRUN_HUD_TIMER, "", 0);
+    if (current_split_remaining_frames_local > 0) current_split.remaining_frames--;
+  } else if (current_split_remaining_frames_local > 0) {
     UpdateHUDString(SPEEDRUN_HUD_TIMER, current_split.string, current_split.x_offset);
     current_split.remaining_frames--;
   } else {

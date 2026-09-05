@@ -1,0 +1,8 @@
+arm-none-eabi-gcc -MMD -MP -MF /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/build/uplink.d -g -Wall -O2 -DDEBUG  -march=armv5te -mtune=arm946e-s -fomit-frame-pointer -fno-short-enums -ffast-math -fno-builtin -fmacro-prefix-map=/home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod=. -marm -mno-thumb-interwork -I/home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/include -I/home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/pmdsky-debug/headers  -I/home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/build -DARM9 -flto -c /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/src/uplink.c -o uplink.o 
+echo linking out.elf
+linking out.elf
+arm-none-eabi-gcc  -T /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/build/../symbols/generated_EU.ld -T /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/build/../symbols/custom_EU.ld -T /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/build/../linker.ld -g -marm -mno-thumb-interwork -Wl,-Map,out.map -Xlinker -no-enum-size-warning -nostdlib   aps.o eeprom.o fixed_rng.o fps.o hud.o igt_modifications.o input_display.o optimizations.o soft_reset.o special_processes.o speedrun_hud.o threads.o timer.o uplink.o wm_missions.o effects.o trampolines.o   -o /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/out.elf
+arm-none-eabi-objcopy -O binary /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/out.elf /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/out.bin
+python scripts/patch.py EU rom.nds /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/out.bin /home/SBDWolf/Documents/GitHub/pmdsky-speedrun-mod/out.elf out.nds
+Applying binary patch: patches\internal.asm
+Applying binary patch: patches\patch.asm

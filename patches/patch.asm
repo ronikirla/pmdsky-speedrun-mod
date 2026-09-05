@@ -22,6 +22,60 @@
     .org 0x02077c78
         nop
 
+    // While the DSpico uplink is enabled, suppress the game's "game card was
+    // removed" detection. The DSpico drives the cartridge IRQ line for USB
+    // events, and the firmware/game mis-reads that activity as a card
+    // pull-out. Masking REG_IE (uplink_card_irq_mask in uplink.c) only stops
+    // the firmware IRQ dispatch path; the card library also detects pull-outs
+    // by polling -- Cardi_CheckPulledOutCore compares a card-state token and
+    // fires the pull-out handler itself -- and the engine reaches everything
+    // below through runtime function pointers, so the entries are hooked.
+    // While the uplink is enabled the hooks return early and UplinkTick()
+    // clears the pull-out flag; otherwise the original code runs.
+    .org 0x0208491C
+        b @UplinkSuppressCardPull
+    .org 0x02084A1C
+        b @UplinkSuppressPullCheck
+
+    // Trampolines for the hooks above, in the free space after the existing
+    // ones. @delay is only 0 once overlay 36 is loaded and the threads are
+    // up, so uplink_enabled (which lives in overlay 36) is only read then.
+    .org 0x02094990
+    @UplinkSuppressCardPull:
+        push {r7, lr}
+        ldr r7, [@delay]
+        cmp r7, #0
+        bne @UplinkCardPullRunOrig
+        ldr r7, [@uplink_enabled_ptr]
+        ldrb r7, [r7]
+        cmp r7, #0
+        bne @UplinkCardPullBlock
+    @UplinkCardPullRunOrig:
+        pop {r7, lr}
+        push {r3, lr} // original first instruction
+        b 0x02084920
+    @UplinkCardPullBlock:
+        mov r0, #0
+        pop {r7, pc}
+    @UplinkSuppressPullCheck:
+        push {r7, lr}
+        ldr r7, [@delay]
+        cmp r7, #0
+        bne @UplinkPullCheckRunOrig
+        ldr r7, [@uplink_enabled_ptr]
+        ldrb r7, [r7]
+        cmp r7, #0
+        bne @UplinkPullCheckBlock
+    @UplinkPullCheckRunOrig:
+        pop {r7, lr}
+        push {r3, r4, lr} // original first instruction
+        b 0x02084A20
+    @UplinkPullCheckBlock:
+        mov r0, #0
+        pop {r7, pc}
+    @uplink_enabled_ptr:
+        .word uplink_enabled
+
     // Trampoline for waiting until overlay 36 is loaded before running our custom version of WaitTillVBlank
     .org 0x02003a40
         b @DelayWaitTillVBlankTrampoline

@@ -1,0 +1,10 @@
+#pragma once
+
+typedef enum
+{
+    CAMERA_IPC_CMD_INIT_FRONT,
+    CAMERA_IPC_CMD_INIT_BACK,
+    CAMERA_IPC_CMD_ACTIVATE,
+    CAMERA_IPC_CMD_DEACTIVATE,
+    CAMERA_IPC_CMD_SWITCH
+} CameraIpcCommand;

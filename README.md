@@ -12,6 +12,7 @@
 | **Start + L** | Switch between file timer and a custom timing interval |
 | **Select + L** | Pause timer display for 10 seconds (show split time) |
 | **Start + Left/Right** | Switch gameplay mode on main menu (Throttle/Normal/Fast/RNG Viewer) |
+| **Start + Up** | Toggle the DSpico USB uplink (main menu only) |
 | **L + R + Start + Select** | Soft reset the game (returns to main menu, preserves RNG seed) |
 | **Double tap Start** | Switch between APS counter and idle time display |
 
@@ -96,6 +97,12 @@ Since the in-game timer is supposed to be the main timing method for this game, 
 ## Soft reset
 
 Press **L+R+start+select** to soft reset the game and instantly return to the main menu. Doing this will preserve the selected RNG seed.
+
+## DSpico USB uplink
+
+When running on a DSpico flashcart, the mod can stream autosplitter data (timer, dungeon, and other values) to a PC over the DSpico's USB connection. On the PC side, run `pc/uplink_reader.py` with the DSpico's COM port to receive and parse the 36-byte frames (it verifies the CRC of every frame and prints the current time and dungeon).
+
+The uplink is **off by default** and is toggled on the main menu with **start+up**. It is intentionally not saved to the save data: it only works on a DSpico, and keeping it off by default means the ROM behaves exactly like before on emulators and other flashcarts. After a soft reset or a reboot, the uplink is off again and needs to be toggled on again. While the uplink is on, the main menu HUD shows its status: `USB:INIT` (waiting for the DSpico to answer), `USB:WAIT` (waiting for the PC to recognize the device), `USB:ENUM` (the PC is enumerating it) or `USB:OK seq=...` (streaming data).
 
 ## Known issues
 
