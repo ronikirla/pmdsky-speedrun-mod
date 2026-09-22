@@ -14,6 +14,12 @@ OVERLAY_INDEX = 36
 # see https://docs.google.com/document/d/1Rs4icdYtiM6KYnWxMkdlw7jpWrH7qw5v6LOfDWIiYho
 START_ADDRESS = 0x23D7FF0 
 
+# The uplink (TinyUSB CDC over DSpico) is linked before the mod, in the
+# overlay 36 headroom region. out.bin therefore spans:
+#   [0x23A8000, 0x23D7FF0)  uplink blob
+#   [0x23D7FF0, ...        ) existing mod
+BINARY_START_ADDRESS = 0x23A8000
+
 region = sys.argv[1]
 rom_path = sys.argv[2]
 overlay_bin_path = sys.argv[3]
@@ -54,11 +60,18 @@ def apply_overlay():
   with open(overlay_bin_path, "rb") as f:
     custom_code_bytes = f.read()
 
-  # Combine the existing overlay bytes with the custom code
-  padding = START_ADDRESS - overlay.ramAddress
-  new_overlay_bytes = bytearray(padding + len(custom_code_bytes))
+  # The binary starts at BINARY_START_ADDRESS (uplink region) and covers
+  # both the uplink blob and the mod at START_ADDRESS. Place it at its
+  # absolute offset from the overlay RAM start; the original overlay bytes
+  # (offset 0 .. ~0xF80) are preserved.
+  offset = BINARY_START_ADDRESS - overlay.ramAddress
+  assert offset > 0, "BINARY_START_ADDRESS must be after the overlay RAM start"
+  total = offset + len(custom_code_bytes)
+  assert total <= overlay.ramSize, \
+    f"Combined binary too large: {hex(total)} > {hex(overlay.ramSize)}"
+  new_overlay_bytes = bytearray(total)
   new_overlay_bytes[0:len(overlay_bytes)] = overlay_bytes
-  new_overlay_bytes[padding:padding + len(custom_code_bytes)] = custom_code_bytes
+  new_overlay_bytes[offset:offset + len(custom_code_bytes)] = custom_code_bytes
 
   overlay.data = new_overlay_bytes
   overlay.staticInitStart = overlay_symbols_lookup['__init_array_start']

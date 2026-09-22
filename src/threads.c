@@ -11,6 +11,7 @@
 #include "optimizations.h"
 #include "eeprom.h"
 #include "soft_reset.h"
+#include "uplink.h"
 
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_2KB 1024 * 2
@@ -34,6 +35,9 @@ __attribute__((used)) void InitThreads(void) {
   OS_CreateThread(&main_routine_thread, MainRoutine, NULL,
                   main_routine_thread_stack + STACK_SIZE_4KB / sizeof(uint64_t),
                   STACK_SIZE_4KB, MAIN_ROUTINE_THREAD_PRIO);
+  // Bring up the DSpico USB uplink (card lock is held briefly per
+  // transaction; the game's own card I/O is never disturbed)
+  UplinkInit();
 }
 
 __attribute__((used)) void WakeupThreads(void) {
@@ -68,6 +72,9 @@ void MainRoutine(void*) {
     UpdateInputDisplay();
     UpdateHUDSlots();
     SaveIGT(true);
+    // Stream the memory samples over USB (runs only while the mod thread
+    // would otherwise be idle; pauses while the game holds the card lock)
+    UplinkPoll();
     OS_SleepThread(NULL);
   }
 }
