@@ -98,8 +98,10 @@ const uint8_t uplink_descriptor_configuration[] = {
 // what made Windows abort enumeration before SET_CONFIGURATION.)
 #define UPLINK_STR_HDR(blen) ((uint16_t)((0x03 << 8) | (blen)))
 #define UPLINK_STR(blen, ...) UPLINK_STR_HDR(blen), ##__VA_ARGS__
-// Language descriptor header: wire bytes 04 09 (bLength=4, bDescriptorType=9).
-#define UPLINK_LANG_HDR ((uint16_t)(0x09 << 8) | 0x04)
+// Language descriptor header: wire bytes 04 03 09 04 (bLength=4,
+// bDescriptorType=3/string, wLANGID=0x0409). A language descriptor IS a
+// string descriptor, so the type byte is 0x03 like every other entry here.
+#define UPLINK_LANG_HDR ((uint16_t)(0x03 << 8) | 0x04)
 
 // Word offsets of each descriptor's header word inside
 // uplink_descriptor_string.
@@ -109,8 +111,8 @@ const uint8_t uplink_descriptor_configuration[] = {
 #define UPLINK_STR_OFF_SERIAL (UPLINK_STR_OFF_PROD + 1 + 10)   // + 1 header + 10 chars
 
 const uint16_t uplink_descriptor_string[] = {
-    // String 0: language descriptor, wire bytes 04 09 09 04
-    // (bLength=4, bDescriptorType=9, wLANGID=0x0409 en-US little-endian).
+    // String 0: language descriptor, wire bytes 04 03 09 04
+    // (bLength=4, bDescriptorType=3/string, wLANGID=0x0409 en-US little-endian).
     UPLINK_LANG_HDR,
     0x0409,
     // String 1: "PMDSky" (6 chars -> bLength 14)
@@ -151,7 +153,7 @@ typedef char uplink_str_hdr_check[(((int)UPLINK_STR_HDR(14) & 0xFF) == 14 &&
                                    ((int)UPLINK_STR_HDR(22) & 0xFF) == 22 &&
                                    ((int)UPLINK_STR_HDR(10) & 0xFF) == 10 &&
                                    ((int)UPLINK_LANG_HDR & 0xFF) == 4 &&
-                                   (((int)UPLINK_LANG_HDR >> 8) & 0xFF) == 9) ? 1 : -1];
+                                   (((int)UPLINK_LANG_HDR >> 8) & 0xFF) == 3) ? 1 : -1];
 // Offsets must stay inside the table (each string = 1 header word + char words).
 typedef char uplink_str_off_check[(((UPLINK_STR_OFF_LANG + 2) <= (int)(sizeof(uplink_descriptor_string) / 2)) &&
                                    ((UPLINK_STR_OFF_MFG + 1 + 6) <= (int)(sizeof(uplink_descriptor_string) / 2)) &&
