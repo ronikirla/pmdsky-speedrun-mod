@@ -32,6 +32,8 @@ extern enum hud_display_mode hud_display_mode;
 uint32_t uplink_frames_sent = 0;
 uint32_t uplink_frames_dropped = 0;
 uint32_t uplink_card_lock_skips = 0;
+uint32_t uplink_card_lock_waits = 0;
+uint32_t uplink_card_busy_timeouts = 0;
 
 static struct {
   uint32_t address; // 0 = disabled
@@ -46,6 +48,8 @@ void uplink_sampler_init(void) {
   uplink_frames_sent = 0;
   uplink_frames_dropped = 0;
   uplink_card_lock_skips = 0;
+  uplink_card_lock_waits = 0;
+  uplink_card_busy_timeouts = 0;
   s_seq = 0;
   s_block_len = 0;
 

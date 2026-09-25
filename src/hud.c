@@ -7,7 +7,20 @@
 
 #define WINDOW_WIDTH_TOP 10
 #define WINDOW_OFFSET_TOP_LEFT 6
-#define WINDOW_OFFSET_TOP_RIGHT 22
+
+// The top-right slot doubles as the uplink debug console's display area
+// (see src/uplink/uplink_dbg.c), so it uses its own, larger geometry
+// instead of the shared top-slot defaults: it starts further left (cell
+// 14) and is wider/taller, while its right edge (cell 14+18 = 32) stays
+// flush with the right edge of the top screen. The slot is 18 cells tall
+// (144px) to show 18 console log lines; it fits within the 192px top
+// screen. Its top 16px overlap the top-left slot by two cells
+// (112-128px); both are invisible boxes, so while the console is enabled
+// its text simply wins that region and the top-left content is restored
+// when it is disabled.
+#define WINDOW_OFFSET_TOP_RIGHT 14
+#define WINDOW_WIDTH_TOP_RIGHT 18
+#define WINDOW_HEIGHT_TOP_RIGHT 18
 
 #define WINDOW_WIDTH_BOTTOM 32
 #define WINDOW_OFFSET_BOTTOM 22
@@ -52,8 +65,8 @@ struct hud_window_status hud_status[] = {
     .params = {
       .x_offset = WINDOW_OFFSET_TOP_RIGHT,
       .y_offset = 0,
-      .width = WINDOW_WIDTH_TOP,
-      .height = WINDOW_HEIGHT,
+      .width = WINDOW_WIDTH_TOP_RIGHT,
+      .height = WINDOW_HEIGHT_TOP_RIGHT,
       .screen = {SCREEN_SUB},
       .box_type = {BOX_TYPE_INVISIBLE}
     }
@@ -140,6 +153,12 @@ void CloseHUD(enum hud_slot slot) {
   
   CloseTextBox(hud_status[slot].window_id);
   hud_status[slot].window_id = -1;
+}
+
+// Get the current window id of a HUD slot (-1 if the window is not open).
+// Used by the uplink debug console to render into the top-right slot.
+int HUD_GetWindowId(enum hud_slot slot) {
+  return hud_status[slot].window_id;
 }
 
 bool simple_menu_open;

@@ -12,6 +12,10 @@
 #define UPLINK_EPSIZE_NOTIF   16
 #define UPLINK_EPSIZE_DATA    64 // full-speed max packet
 
+// Descriptor lengths (also enforced by the compile-time checks in usb_descriptors.c)
+#define UPLINK_DEV_DESC_LEN 18
+#define UPLINK_CFG_DESC_LEN (9 + (9 + 5 + 5 + 4 + 5) + 7 + (9 + 7 + 7))
+
 extern const uint8_t uplink_descriptor_device[];
 extern const uint8_t uplink_descriptor_configuration[];
 extern const uint16_t uplink_descriptor_string[];

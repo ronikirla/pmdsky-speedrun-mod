@@ -35,6 +35,11 @@
 #include "device/usbd.h"
 #include "device/usbd_pvt.h"
 
+// PMDSky uplink debug console: probe logging for the enumeration path
+// (SETUP dequeue, request type, descriptor dispatch). Resolved relative to
+// this file (src/uplink/tinyusb/src/device -> three levels up = src/uplink).
+#include "../../../uplink_dbg.h"
+
 //--------------------------------------------------------------------+
 // USBD Configuration
 //--------------------------------------------------------------------+
@@ -610,6 +615,7 @@ void tud_task_ext(uint32_t timeout_ms, bool in_isr) {
         break;
 
       case DCD_EVENT_SETUP_RECEIVED:
+        uplink_dbg_log_raw("SETUP q=%d", (int)_usbd_queued_setup);
         TU_ASSERT(_usbd_queued_setup > 0,);
         _usbd_queued_setup--;
         TU_LOG_BUF(CFG_TUD_LOG_LEVEL, &event.setup_received, 8);
@@ -667,6 +673,7 @@ void tud_task_ext(uint32_t timeout_ms, bool in_isr) {
         // e.g suspend -> resume -> unplug/plug. Skip suspend/resume if not connected
         if (_usbd_dev.connected) {
           TU_LOG_USBD(": Remote Wakeup = %u\r\n", _usbd_dev.remote_wakeup_en);
+          uplink_dbg_log("TASK SUSP");
           tud_suspend_cb(_usbd_dev.remote_wakeup_en);
         } else {
           TU_LOG_USBD(" Skipped\r\n");
@@ -676,6 +683,7 @@ void tud_task_ext(uint32_t timeout_ms, bool in_isr) {
       case DCD_EVENT_RESUME:
         if (_usbd_dev.connected) {
           TU_LOG_USBD("\r\n");
+          uplink_dbg_log("TASK RES");
           tud_resume_cb();
         } else {
           TU_LOG_USBD(" Skipped\r\n");
@@ -720,6 +728,7 @@ static bool invoke_class_control(uint8_t rhport, usbd_class_driver_t const * dri
 // This handles the actual request and its response.
 // Returns false if unable to complete the request, causing caller to stall control endpoints.
 static bool process_control_request(uint8_t rhport, tusb_control_request_t const * p_request) {
+  uplink_dbg_log_raw("PCTL %02x %u", (unsigned)p_request->bmRequestType, (unsigned)p_request->bRequest);
   usbd_control_set_complete_callback(NULL);
   TU_ASSERT(p_request->bmRequestType_bit.type < TUSB_REQ_TYPE_INVALID);
 
@@ -775,6 +784,7 @@ static bool process_control_request(uint8_t rhport, tusb_control_request_t const
 
         case TUSB_REQ_SET_CONFIGURATION: {
           uint8_t const cfg_num = (uint8_t) p_request->wValue;
+          uplink_dbg_log_raw("CFGSET %u", cfg_num);
 
           // Only process if new configure is different
           if (_usbd_dev.cfg_num != cfg_num) {
@@ -802,10 +812,12 @@ static bool process_control_request(uint8_t rhport, tusb_control_request_t const
               // switch to new configuration if not zero
               if (!process_set_config(rhport, cfg_num)) {
                 TU_MESS_FAILED();
+                uplink_dbg_log_raw("CFGFAIL %u", cfg_num);
                 TU_BREAKPOINT();
                 _usbd_dev.cfg_num = 0;
                 return false;
               }
+              uplink_dbg_log_raw("CFGOK %u", cfg_num);
               tud_mount_cb();
             } else {
               tud_umount_cb();
@@ -1072,6 +1084,7 @@ static bool process_get_descriptor(uint8_t rhport, tusb_control_request_t const 
 {
   tusb_desc_type_t const desc_type = (tusb_desc_type_t) tu_u16_high(p_request->wValue);
   uint8_t const desc_index = tu_u16_low( p_request->wValue );
+  uplink_dbg_log_raw("GDT t=%u i=%u", (unsigned)desc_type, (unsigned)desc_index);
 
   switch(desc_type)
   {

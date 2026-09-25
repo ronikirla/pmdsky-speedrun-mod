@@ -131,8 +131,12 @@ uint32_t dspico_card_get_data(void);   // read REG_MCD1
 // CPU data-phase transfers. `words` is a 32-bit word count (LEN_512 == 512
 // bytes == 128 words). Both loop until the busy bit clears, feeding or
 // draining REG_MCD1 while DATA_READY is set. Unaligned-safe byte access.
+//
+// cpu_write reads at most `valid_bytes` bytes from `src` and zero-pads the
+// rest of the phase (the DSpico only transfers `valid_bytes` of each 512-byte
+// double buffer; the remainder must be well-formed, not OOB garbage).
 void   dspico_card_cpu_read(void* dst, uint32_t words);
-void   dspico_card_cpu_write(const void* src, uint32_t words);
+void   dspico_card_cpu_write(const void* src, uint32_t words, uint32_t valid_bytes);
 
 //--------------------------------------------------------------------+
 // Locked wrappers (safe to call from the uplink thread)

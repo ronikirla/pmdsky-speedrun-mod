@@ -32,6 +32,7 @@
 #include "device/usbd_pvt.h"
 
 #include "cdc_device.h"
+#include "uplink_dbg.h"
 
 // Level where CFG_TUSB_DEBUG must be at least for this driver is logged
 #ifndef CFG_TUD_CDC_LOG_LEVEL
@@ -358,6 +359,7 @@ uint16_t cdcd_open(uint8_t rhport, const tusb_desc_interface_t* itf_desc, uint16
 
   // Prepare for incoming data
   _prep_out_transaction(cdc_id);
+  uplink_dbg_log_raw("CDCOPEN itf%u", itf_desc->bInterfaceNumber);
 
   return drv_len;
 }
@@ -385,6 +387,7 @@ bool cdcd_control_xfer_cb(uint8_t rhport, uint8_t stage, const tusb_control_requ
     case CDC_REQUEST_SET_LINE_CODING:
       if (stage == CONTROL_STAGE_SETUP) {
         TU_LOG_DRV("  Set Line Coding\r\n");
+        uplink_dbg_log_raw("LINC");
         tud_control_xfer(rhport, request, &p_cdc->line_coding, sizeof(cdc_line_coding_t));
       } else if (stage == CONTROL_STAGE_ACK) {
         if (tud_cdc_line_coding_cb) {
@@ -418,6 +421,7 @@ bool cdcd_control_xfer_cb(uint8_t rhport, uint8_t stage, const tusb_control_requ
         tu_fifo_set_overwritable(&p_cdc->tx_ff, !dtr);
 
         TU_LOG_DRV("  Set Control Line State: DTR = %d, RTS = %d\r\n", dtr, rts);
+        uplink_dbg_log("DTR %u RTS %u", (uint32_t)dtr, (uint32_t)rts);
 
         // Invoke callback
         if (tud_cdc_line_state_cb) {
