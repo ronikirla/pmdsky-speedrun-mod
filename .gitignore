@@ -14,3 +14,5 @@ out.*
 *.mln
 
 symbols/generated_*.ld
+uplink-reader/bin/
+uplink-reader/obj/

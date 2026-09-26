@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>UplinkReader</RootNamespace>
+    <AssemblyName>uplink-reader</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <UseAvalonia>true</UseAvalonia>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.1.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.1.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.0" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.1.0" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
