@@ -28,6 +28,10 @@ Default sample slots (uplink_sampler_init):
     6 REG_MCCNT0          7 uplink_frames_sent        8 uplink_frames_dropped
     9 uplink_card_lock_skips
 
+If the device disconnects mid-run (e.g. a soft reset reboots the NDS), the
+reader waits for it to re-enumerate, reopens the port, and re-sends START
+(and any --set-addr retargets) before resuming.
+
 Usage examples:
     python tools/pc_reader.py                      # auto-detect, live tail
     python tools/pc_reader.py --port COM5 --csv run1.csv
@@ -48,6 +52,14 @@ UPLINK_PID = 0xD801
 CMD_START = b'\x01'
 CMD_STOP = b'\x02'
 CMD_PING = b'\x04'
+
+# Reconnect behavior (the device drops whenever the NDS reboots, e.g. on
+# soft reset): rescan every RECONNECT_POLL_S, wait OPEN_SETTLE_S after a
+# port appears before opening it, and treat SILENCE_WATCHDOG_S of silence
+# while sampling is active as a lost device.
+RECONNECT_POLL_S = 1.0
+OPEN_SETTLE_S = 0.5
+SILENCE_WATCHDOG_S = 3.0
 
 DEFAULT_SLOT_NAMES = [
     'PLAY_TIME_SECONDS', 'PLAY_TIME_FRAME_COUNTER', 'start_time',
@@ -107,6 +119,7 @@ class Stats:
         self.seq_gaps = 0
         self.gap_frames = 0
         self.text_lines = 0
+        self.reconnects = 0
         self.last_seq = None
         self.bytes = 0
         self.start_time = time.time()
@@ -127,6 +140,7 @@ class Stats:
               % (self.seq_gaps, self.gap_frames,
                  'n/a' if self.last_seq is None else str(self.last_seq)))
         print('host text lines : %d' % self.text_lines)
+        print('reconnects      : %d' % self.reconnects)
 
 
 def process_frame(frame, stats, csv_file, args):
@@ -161,6 +175,61 @@ def handle_stray(data, stats):
             print('host> ' + line.decode('ascii', 'replace'))
 
 
+def parse_set_addr(args):
+    # Validate --set-addr values up front so reconnects can re-issue them.
+    out = []
+    for slot, addr in (args.set_addr or []):
+        try:
+            idx = int(slot)
+            value = int(addr, 0)
+        except ValueError:
+            sys.exit('--set-addr takes SLOT (0-9) and ADDR (hex)')
+        if not 0 <= idx <= SAMPLE_COUNT - 1:
+            sys.exit('sample slot out of range: %d' % idx)
+        out.append((idx, value))
+    return out
+
+
+def send_session(ser, set_addrs, start, stop=False, ping=False):
+    # Issue the session host commands. start/stop set the sampling state,
+    # set_addrs retargets slots (always re-issued after a reboot, since the
+    # device state resets), ping is a one-shot probe (never re-sent).
+    if start:
+        ser.write(CMD_START)
+        print('sent START')
+    if stop:
+        ser.write(CMD_STOP)
+        print('sent STOP')
+    for idx, value in set_addrs:
+        ser.write(bytes([0x03, idx]) + struct.pack('<I', value))
+        print('sent SET_ADDR slot=%d addr=0x%08x' % (idx, value & 0xFFFFFFFF))
+    if ping:
+        ser.write(CMD_PING)
+        print('sent PING')
+
+
+def rescan_port(serial_mod, baud, deadline):
+    # Poll until the uplink device reappears and opens. Returns (port, ser)
+    # or (None, None) when the deadline passes first.
+    print('waiting for device with VID %04x/PID %04x ...' % (UPLINK_VID, UPLINK_PID))
+    last_note = time.time()
+    while True:
+        if deadline is not None and time.time() >= deadline:
+            return None, None
+        port = find_uplink_port(serial_mod)
+        if port:
+            time.sleep(OPEN_SETTLE_S)
+            try:
+                return port, serial_mod.Serial(port, baud, timeout=0.5)
+            except serial_mod.SerialException:
+                pass  # enumerated but not ready yet; poll again
+        now = time.time()
+        if now - last_note >= 5.0:
+            last_note = now
+            print('still waiting for the uplink device ...')
+        time.sleep(RECONNECT_POLL_S)
+
+
 def main(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else argv)
     serial = import_serial()
@@ -184,45 +253,80 @@ def main(argv=None):
         csv_file = open(args.csv, 'w', newline='')
         csv_file.write('recv_ms,seq,gap,game_frame,' + ','.join(DEFAULT_SLOT_NAMES) + '\n')
 
-    try:
-        ser = serial.Serial(port, args.baud, timeout=0.5)
-    except serial.SerialException as e:
-        sys.exit('Cannot open %s: %s' % (port, e))
+    ser = None
+    last_err = None
+    for _ in range(5):
+        try:
+            ser = serial.Serial(port, args.baud, timeout=0.5)
+            break
+        except serial.SerialException as e:
+            last_err = e
+            time.sleep(1.0)
+    if ser is None:
+        sys.exit('Cannot open %s: %s' % (port, last_err))
 
     print('Uplink reader on %s (VID %04x PID %04x)' % (port, UPLINK_VID, UPLINK_PID))
 
     # Host commands first, so sampling state is set before we start reading.
-    if args.start:
-        ser.write(CMD_START)
-        print('sent START')
-    if args.stop:
-        ser.write(CMD_STOP)
-        print('sent STOP')
-    for slot, addr in (args.set_addr or []):
-        try:
-            idx = int(slot)
-            value = int(addr, 0)
-        except ValueError:
-            sys.exit('--set-addr takes SLOT (0-9) and ADDR (hex)')
-        if not 0 <= idx <= SAMPLE_COUNT - 1:
-            sys.exit('sample slot out of range: %d' % idx)
-        ser.write(bytes([0x03, idx]) + struct.pack('<I', value))
-        print('sent SET_ADDR slot=%d addr=0x%08x' % (idx, value & 0xFFFFFFFF))
-    if args.ping:
-        ser.write(CMD_PING)
-        print('sent PING')
+    set_addrs = parse_set_addr(args)
+    send_session(ser, set_addrs, start=args.start, stop=args.stop, ping=args.ping)
+    # Sampling state the device should be in across reconnects. A reboot
+    # always lands in the stopped state, so only START needs re-sending.
+    sampling_active = args.start and not args.stop
 
     stats = Stats()
     buf = bytearray()
     stray = bytearray()
     deadline = None if not args.duration else time.time() + args.duration
+    last_rx = 0.0  # wall time of the last received data (0 = nothing yet)
+
+    def handle_disconnect(ser, reason):
+        # Device dropped (NDS reboot after a soft reset, DS sleep, unplug):
+        # wait for it to re-enumerate, reopen, and re-issue the persistent
+        # session commands. Returns the new ser, or None to stop.
+        nonlocal last_rx
+        stats.reconnects += 1
+        print('device lost (%s)' % reason)
+        try:
+            ser.close()
+        except Exception:
+            pass
+        del buf[:]
+        del stray[:]
+        port, new_ser = rescan_port(serial, args.baud, deadline)
+        if new_ser is None:
+            print('giving up: uplink device did not reappear')
+            return None
+        print('reconnected on %s' % port)
+        send_session(new_ser, set_addrs, start=sampling_active)
+        last_rx = 0.0
+        return new_ser
+
     try:
         while deadline is None or time.time() < deadline:
-            data = ser.read(512)
-            if not data:
+            try:
+                data = ser.read(512)
+            except (serial.SerialException, OSError) as e:
+                ser = handle_disconnect(ser, str(e))
+                if ser is None:
+                    break
                 continue
-            stats.bytes += len(data)
-            buf += data
+            if data:
+                last_rx = time.time()
+                stats.bytes += len(data)
+                buf += data
+            elif (sampling_active and last_rx and
+                  time.time() - last_rx >= SILENCE_WATCHDOG_S):
+                # Silence far beyond any normal gap while sampling is active
+                # means the device went away without raising on read.
+                ser = handle_disconnect(
+                    ser, 'no data for %.0f s while sampling'
+                    % (time.time() - last_rx))
+                if ser is None:
+                    break
+                continue
+            else:
+                continue
             while True:
                 idx = buf.find(MAGIC)
                 if idx < 0:

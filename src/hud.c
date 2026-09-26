@@ -8,6 +8,8 @@
 #define WINDOW_WIDTH_TOP 10
 #define WINDOW_OFFSET_TOP_LEFT 6
 #define WINDOW_OFFSET_TOP_RIGHT 22
+#define WINDOW_WIDTH_TOP_RIGHT 18
+#define WINDOW_HEIGHT_TOP_RIGHT 18
 
 #define WINDOW_WIDTH_BOTTOM 32
 #define WINDOW_OFFSET_BOTTOM 22
@@ -41,10 +43,11 @@ struct hud_window_status hud_status[] = {
          .y_offset = 0,
          .width = WINDOW_WIDTH_TOP,
          .height = WINDOW_HEIGHT,
-         .screen = {SCREEN_SUB},
-         .box_type = {BOX_TYPE_INVISIBLE}}},
-    {.window_id = -1, .strings = {NULL}, .x_offsets = {NULL}, .params = {.x_offset = WINDOW_OFFSET_TOP_RIGHT, .y_offset = 0, .width = WINDOW_WIDTH_TOP, .height = WINDOW_HEIGHT, .screen = {SCREEN_SUB}, .box_type = {BOX_TYPE_INVISIBLE}}},
-    {.window_id = -1, .strings = {NULL}, .x_offsets = {NULL}, .params = {.x_offset = 0, .y_offset = WINDOW_OFFSET_BOTTOM, .width = WINDOW_WIDTH_BOTTOM, .height = WINDOW_HEIGHT, .screen = {SCREEN_MAIN}, .box_type = {BOX_TYPE_INVISIBLE}}}}; // Shared resource
+         .screen = SCREEN_SUB,
+         .box_type = BOX_TYPE_INVISIBLE}},
+    {.window_id = -1, .strings = {NULL}, .x_offsets = {NULL}, .params = {.x_offset = WINDOW_OFFSET_TOP_RIGHT, .y_offset = 0, .width = WINDOW_WIDTH_TOP, .height = WINDOW_HEIGHT, .screen = SCREEN_SUB, .box_type = BOX_TYPE_INVISIBLE}},
+    {.window_id = -1, .strings = {NULL}, .x_offsets = {NULL}, .params = {.x_offset = 0, .y_offset = WINDOW_OFFSET_BOTTOM, .width = WINDOW_WIDTH_BOTTOM, .height = WINDOW_HEIGHT, .screen = SCREEN_MAIN, .box_type = BOX_TYPE_INVISIBLE}}};
+
 // Leave this empty since we want to implement our own handling and not worry about the
 // game's own callback system
 void HUDCallback(int window_id) {};
