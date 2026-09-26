@@ -1,27 +1,15 @@
 using Avalonia;
-using UplinkReader.ConsoleMode;
-using UplinkReader.SelfTest;
 using UplinkReader.Ui;
 
 namespace UplinkReader;
 
 public static class Program
 {
-    // Modes:
-    //   (default)   GUI (Avalonia): port detection, connect control, status
-    //   --console   headless reader with a per-frame console log (debugging)
-    //   --selftest  offline protocol self-test (no device needed)
+    // The app takes no launch parameters: it always starts the GUI.
+    // Debug builds also log every frame and session event to standard
+    // I/O (see ConsoleLog); Release builds are a plain GUI app.
     [STAThread]
-    public static int Main(string[] args)
-    {
-        if (args.Contains("--selftest"))
-            return SelfTestRunner.Run();
-
-        if (args.Contains("--console"))
-            return ConsoleRunner.Run(args);
-
-        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
+    public static int Main() => BuildAvaloniaApp().StartWithClassicDesktopLifetime(Array.Empty<string>());
 
     public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>()
         .UsePlatformDetect()

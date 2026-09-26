@@ -1,25 +1,30 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using UplinkReader;
 using UplinkReader.Config;
+using UplinkReader.ConsoleMode;
 using UplinkReader.Link;
 using UplinkReader.Protocol;
 
 namespace UplinkReader.Ui;
 
 /// <summary>
-/// Main window: DSPico detection, port selection, auto-connect
-/// checkbox (persisted), connect/disconnect, and connection status.
-/// Sample values are deliberately not displayed here — use
-/// --console mode or the UplinkClient.FrameReceived event for that.
+/// Main window: DSPico detection, port selection (auto-refreshed every
+/// 3 s), auto-connect checkbox (persisted), connect/disconnect, and
+/// connection status. Sample values are deliberately not displayed
+/// here — Debug builds log every frame to the console (ConsoleLog),
+/// and the UplinkClient.FrameReceived event is available for other use.
 /// </summary>
 public partial class MainWindow : Window
 {
     private readonly AppConfig _config;
     private readonly UplinkClient _client;
     private readonly DispatcherTimer _statsTimer;
+    private readonly DispatcherTimer _portTimer;
+    private readonly Stopwatch _session = Stopwatch.StartNew();
     private bool _suppressPortEvents;
 
     public MainWindow()
@@ -34,11 +39,24 @@ public partial class MainWindow : Window
         _client.StateChanged += OnStateChanged;
         _client.Start();
 
+        // Console log to standard I/O (Debug builds only; no-op in
+        // Release — see ConsoleLog).
+        ConsoleLog.Banner();
+        _client.FrameReceived += ConsoleLog.Frame;
+        _client.Log += ConsoleLog.Log;
+        _client.DeviceLine += ConsoleLog.DeviceLine;
+
         // Refresh the counters a few times per second (values are not
         // shown in the GUI).
         _statsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _statsTimer.Tick += (_, _) => UpdateStatsText();
         _statsTimer.Start();
+
+        // Auto-refresh the port list every few seconds (new ports,
+        // VID/PID changes, unplug/replug).
+        _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _portTimer.Tick += (_, _) => RefreshPorts();
+        _portTimer.Start();
 
         AutoConnectCheck.IsChecked = _config.AutoConnect;
         RefreshPorts();
@@ -152,6 +170,8 @@ public partial class MainWindow : Window
     {
         SaveConfig();
         _statsTimer.Stop();
+        _portTimer.Stop();
+        ConsoleLog.Summary(_client, _session.Elapsed.TotalSeconds);
         _client.Dispose();
     }
 }

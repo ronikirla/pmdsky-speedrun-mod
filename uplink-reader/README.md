@@ -5,7 +5,8 @@ C#/.NET 8 reader for the PMDSky speedrun mod's DSPico uplink link
 rewrite of `tools/pc_reader.py` — same wire protocol (v1), same
 behavior (START on every (re)connect, one-shot PING on first connect,
 persistent reconnect, 3 s silence watchdog) — with an Avalonia GUI and
-a console mode. No firmware, USB transport, or Python code is touched.
+a debug console log. No firmware, USB transport, or Python code is
+touched.
 
 ## Wire protocol (v1, unchanged)
 
@@ -30,21 +31,25 @@ dotnet build uplink-reader/uplink-reader.csproj -c Release
 
 ## Run
 
+The app takes no launch parameters — it always starts the GUI:
+
 ```
-# GUI: detection, connect control, auto-connect checkbox, status
 dotnet uplink-reader/bin/Release/net8.0/uplink-reader.dll
-
-# Console mode: per-frame log (seq + all named slot values at ~60 Hz)
-dotnet uplink-reader/bin/Release/net8.0/uplink-reader.dll --console
-dotnet uplink-reader/bin/Release/net8.0/uplink-reader.dll --console --port COM5
-dotnet uplink-reader/bin/Release/net8.0/uplink-reader.dll --console --duration 10
-
-# List ports (with VID:PID where detectable)
-dotnet uplink-reader/bin/Release/net8.0/uplink-reader.dll --console --list
-
-# Offline protocol self-test (no device needed)
-dotnet uplink-reader/bin/Release/net8.0/uplink-reader.dll --selftest
 ```
+
+(`dotnet run --project uplink-reader` works too.)
+
+- **Release** builds are a plain GUI app (no console window, no logging).
+- **Debug** builds are a console app: in addition to the GUI, every
+  frame (`seq=... <game time>  slot=value ...` at ~60 Hz), session
+  events (connect / reconnect / watchdog), device lines (`host> ...`),
+  and a session summary on exit are logged to standard output. This
+  replaces the old `--console` mode; it is compiled in with `#if DEBUG`
+  and is not toggled by a launch parameter.
+
+The port list in the GUI auto-refreshes every 3 s (new ports, VID/PID
+changes, unplug/replug); the Refresh button remains for an immediate
+refresh.
 
 ## Notes
 
@@ -61,3 +66,6 @@ dotnet uplink-reader/bin/Release/net8.0/uplink-reader.dll --selftest
 - Soft resets (and unplug/replug) are handled automatically: the link
   is dropped and reconnected with a fresh START, exactly like
   `tools/pc_reader.py`.
+- The offline protocol self-test (`SelfTestRunner` in
+  `SelfTest/SelfTest.cs`) is no longer reachable from the app (it used
+  `--selftest`); it remains in the tree for a future unit-test project.

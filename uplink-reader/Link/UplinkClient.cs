@@ -50,6 +50,8 @@ public sealed class UplinkClient : IDisposable
 
     public UplinkState State => _state;
 
+    public uint MagicNumberMarker = 2127059;
+
     /// <summary>Most recently decoded frame (null until the first frame).</summary>
     public UplinkSample? Latest => _latest;
 

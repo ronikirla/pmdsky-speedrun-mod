@@ -1,4 +1,5 @@
 using System.IO.Ports;
+using System.Runtime.Versioning;
 using UplinkReader.Protocol;
 
 namespace UplinkReader;
@@ -74,6 +75,7 @@ public static class PortDiscovery
 
     // Walks HKLM\SYSTEM\CurrentControlSet\Enum\USB\VID_xxxx&PID_yyyy\<inst>
     // and records which COM port each USB device owns.
+    [SupportedOSPlatform("windows")]
     private static void ScanWindowsRegistry(Dictionary<string, (ushort Vid, ushort Pid)> into)
     {
         using var usbRoot = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USB");
