@@ -1,5 +1,4 @@
 #include "dspico_card.h"
-#include "uplink_dbg.h"
 #include "uplink_sampler.h"
 
 // card_romSetCmd from Gericom/libtwl: a single 64-bit bswap store over the
@@ -22,21 +21,7 @@ bool dspico_card_is_busy(void) {
 }
 
 void dspico_card_wait_busy(void) {
-#if UPLINK_DBG_ENABLED
-  uint32_t start = uplink_dbg_ms();
-  bool warned = false;
-#endif
   while (dspico_card_is_busy()) {
-#if UPLINK_DBG_ENABLED
-    // A LEN_512 phase at 6.7 MHz takes < 1 ms; a long wait means the DSpico
-    // firmware is not clearing busy. It hangs the whole main thread, so the
-    // debug console freezes on this line - that is the diagnostic.
-    if (!warned && uplink_dbg_ms() - start >= 20) {
-      warned = true;
-      uplink_card_busy_timeouts++;
-      uplink_dbg_log("wait_busy >20ms, DSpico stuck?");
-    }
-#endif
   }
 }
 
@@ -116,22 +101,10 @@ void dspico_card_lock_release(uint16_t lock_id) {
 }
 
 uint16_t dspico_card_lock_wait(void) {
-#if UPLINK_DBG_ENABLED
-  uint32_t start = uplink_dbg_ms();
-#endif
   for (;;) {
     int id = OS_GetLockID();
     if (id >= 0) {
       Card_LockRom((uint16_t)id); // waits until the card is free
-#if UPLINK_DBG_ENABLED
-      uint32_t elapsed = uplink_dbg_ms() - start;
-      if (elapsed >= 2) {
-        // The game's card I/O (saves, audio streams, ...) held the lock.
-        // Long waits here stall every DSpico transaction, including USB.
-        uplink_card_lock_waits++;
-        uplink_dbg_log("card lock wait %u ms", elapsed);
-      }
-#endif
       return (uint16_t)id;
     }
   }

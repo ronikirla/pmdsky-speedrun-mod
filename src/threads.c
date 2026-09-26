@@ -12,7 +12,6 @@
 #include "eeprom.h"
 #include "soft_reset.h"
 #include "uplink.h"
-#include "uplink_dbg.h"
 
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_2KB 1024 * 2
@@ -52,7 +51,6 @@ __attribute__((used)) void WakeupThreads(void) {
 // see what could happen in other threads
 void VCount0Routine(void*) {
   while(true) {
-    uplink_dbg_ms_tick(16); // ~16 ms per frame: feeds the uplink_dbg clock
     CalculateFPS();
     UpdateAPSIdleTime();
     OS_SleepThread(NULL);
@@ -74,13 +72,9 @@ void MainRoutine(void*) {
     UpdateInputDisplay();
     UpdateHUDSlots();
     SaveIGT(true);
-    // Render any pending uplink debug-console lines before the USB work...
-    uplink_dbg_poll();
     // Stream the memory samples over USB (runs only while the mod thread
     // would otherwise be idle; pauses while the game holds the card lock)
     UplinkPoll();
-    // ...and render the debug-console lines it produced
-    uplink_dbg_poll();
     OS_SleepThread(NULL);
   }
 }

@@ -22,8 +22,3 @@ void AssignHUDSlot(enum hud_slot slot, int string_idx, char* string_pointer, uin
 
 // Set the string pointers of every HUD slot to null
 void ClearHUDSlots(void);
-
-// Whether the game's window system currently allows creating a text box
-// (same safe-state rule as the HUD's own creation in hud.c)
-// Get the current window id of a HUD slot (-1 if the window is not open)
-int HUD_GetWindowId(enum hud_slot slot);

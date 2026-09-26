@@ -71,7 +71,7 @@ TUSB_CFILES	:=	tusb.c tusb_fifo.c usbd.c usbd_control.c cdc_device.c
 # NOTE: keep this block OUTSIDE the ifneq below so the target-specific rule
 # also exists in the inner (build/) make invocation that compiles objects.
 UPLINK_OBJS        :=      uplink.o uplink_sampler.o usb_descriptors.o dspico_card.o \
-                    dcd_dspico.o uplink_dbg.o tusb.o tusb_fifo.o usbd.o usbd_control.o cdc_device.o
+                    dcd_dspico.o tusb.o tusb_fifo.o usbd.o usbd_control.o cdc_device.o
 $(UPLINK_OBJS): CFLAGS += -fno-lto
 
 # Change to "RELEASE_CONFIG := -DNDEBUG" for release builds without asserts and logs

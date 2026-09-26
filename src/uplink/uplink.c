@@ -3,7 +3,6 @@
 #include "usb_descriptors.h"
 #include "dspico_card.h"
 #include "uplink_sampler.h"
-#include "uplink_dbg.h"
 
 extern void dspico_dcd_poll(void); // dcd_dspico.c
 
@@ -15,13 +14,11 @@ static bool s_sampling = false;
 //--------------------------------------------------------------------+
 
 uint8_t const* tud_descriptor_device_cb(void) {
-  uplink_dbg_log_raw("DESC device %uB", (uint32_t)UPLINK_DEV_DESC_LEN);
   return (uint8_t const*)uplink_descriptor_device;
 }
 
 uint8_t const* tud_descriptor_configuration_cb(uint8_t index) {
   (void) index;
-  uplink_dbg_log_raw("DESC config %uB", (uint32_t)UPLINK_CFG_DESC_LEN);
   return (uint8_t const*)uplink_descriptor_configuration;
 }
 
@@ -166,21 +163,17 @@ static void uplink_handle_host_command(uint8_t const* buf, uint16_t len) {
   switch (buf[0]) {
     case 0x01: // START
       s_sampling = true;
-      uplink_dbg_log("CMD start");
       break;
     case 0x02: // STOP
       s_sampling = false;
       uplink_sampler_discard_block();
-      uplink_dbg_log("CMD stop");
       break;
     case 0x03: // SET_ADDR idx u32
       if (len >= 5) {
-        uplink_dbg_log("CMD set %u %08x", (uint32_t)buf[1], uplink_le32(buf + 2));
         uplink_sampler_set_addr(buf[1], uplink_le32(buf + 2));
       }
       break;
     case 0x04: { // PING
-      uplink_dbg_log("CMD ping");
       char msg[64];
       uint8_t* p = (uint8_t*)msg;
       uint8_t n = 0;
@@ -284,7 +277,6 @@ void UplinkInit(void) {
   if (s_inited) {
     return;
   }
-  uplink_dbg_init();
   uplink_sampler_init();
 
 #if UPLINK_LOCAL_CDC
@@ -293,7 +285,6 @@ void UplinkInit(void) {
   // The NDS keeps no TinyUSB state; UplinkPoll() ships sample blocks and
   // polls the firmware status block.
   uplink_local_send_cmd(DSPICO_CMD_USB_COMMAND_LOCAL_STACK);
-  uplink_dbg_log("uplink init done (local CDC)");
 #else
   tusb_rhport_init_t init = {
     .role = TUSB_ROLE_DEVICE,
@@ -305,7 +296,6 @@ void UplinkInit(void) {
   // explicitly - without it the host can never detect the device.
   tusb_init(0, &init);
   tud_connect();
-  uplink_dbg_log("uplink init done");
 #endif
 
   s_sampling = true; // auto-start; host can pause with 0x02
@@ -345,12 +335,6 @@ void UplinkPoll(void) {
     if (++s_poll_cnt >= UPLINK_LOCAL_POLL_EVERY) {
       s_poll_cnt = 0;
       if (uplink_local_poll_status()) {
-        static bool s_was_connected = false;
-        bool conn = s_local.cdc_connected;
-        if (conn != s_was_connected) {
-          s_was_connected = conn;
-          uplink_dbg_log("CDC %s", conn ? "connected" : "disconnected");
-        }
         if (s_local.rx_pending > 0) {
           uint32_t n = uplink_local_read_block(s_rx_buf, UPLINK_LOCAL_RX_EP);
           uplink_cmd_feed(s_rx_buf, n);
@@ -358,51 +342,13 @@ void UplinkPoll(void) {
       }
     }
   }
-
-  // 4. Persistent status line (~500 ms), straight from the firmware
-  {
-    static uint32_t s_last_status_ms = 0;
-    uint32_t now = uplink_dbg_ms();
-    if (now - s_last_status_ms >= 500) {
-      s_last_status_ms = now;
-      uplink_dbg_log("st cfg=%u cdc=%u dtr=%u txb=%u drop=%u rx=%u",
-                     (uint32_t)s_local.configured, (uint32_t)s_local.cdc_connected,
-                     (uint32_t)s_local.dtr, s_local.tx_bytes, s_local.tx_drops,
-                     s_local.rx_pending);
-    }
-  }
 #else
-  // CDC connection edge (enumeration success shows up here)
-  {
-    static bool s_cdc_conn = false;
-    bool conn = tud_cdc_connected();
-    if (conn != s_cdc_conn) {
-      s_cdc_conn = conn;
-      uplink_dbg_log("CDC %s", conn ? "connected" : "disconnected");
-    }
-  }
-
   // 1. Drain DSpico events (card transactions, each inside the game lock)
   dspico_dcd_poll();
 
   // 2. Run the TinyUSB device task. This may issue more card transactions
   //    (edpt_open / edpt_xfer / stall) and invoke the CDC callbacks.
   tud_task();
-
-  // 2b. Persistent status line (~500 ms):
-  //     r=tud_ready d=DTR(CDC line state) m=tud_mounted s=tud_suspended.
-  //     The debug console suppresses identical repeats, so this stays as
-  //     one steady line whose text only changes when the state does.
-  {
-    static uint32_t s_last_status_ms = 0;
-    uint32_t now = uplink_dbg_ms();
-    if (now - s_last_status_ms >= 500) {
-      s_last_status_ms = now;
-      uplink_dbg_log("st r=%u d=%u m=%u s=%u",
-                     (uint32_t)tud_ready(), (uint32_t)tud_cdc_connected(),
-                     (uint32_t)tud_mounted(), (uint32_t)tud_suspended());
-    }
-  }
 
   // 3. Sample + stream
   if (s_sampling) {
@@ -416,15 +362,6 @@ void UplinkPoll(void) {
           uplink_frames_sent += len / UPLINK_FRAME_LEN;
         } else {
           uplink_frames_dropped += len / UPLINK_FRAME_LEN;
-          static uint32_t s_last_drop_logged = 0;
-          if (uplink_frames_dropped - s_last_drop_logged >= 9) {
-            s_last_drop_logged = uplink_frames_dropped;
-            if (tud_cdc_connected()) {
-              uplink_dbg_log("TX full, +%u drops", uplink_frames_dropped - s_last_drop_logged);
-            } else {
-              uplink_dbg_log("drop: CDC not connected");
-            }
-          }
         }
       }
     }
