@@ -6,13 +6,13 @@ CDC serial port (VID 0x2020, PID 0xD801). See src/uplink/uplink.c and
 src/uplink/uplink_sampler.h for the on-device implementation.
 
 Telemetry stream (device -> host, raw bytes, no line framing):
-  54-byte frames, sent in 486-byte blocks (9 frames):
+  70-byte frames, sent in 490-byte blocks (7 frames):
     [0..1]   magic 'P' 'M'
     [2..5]   seq          frame index (u32 LE)
     [6..9]   game_frame   PLAY_TIME as seconds*60 + frames (u32 LE)
-    [10..49] samples[10]  u32 LE, one per sample slot
-    [50..51] checksum     sum of bytes [0..49] (u16 LE)
-    [52..53] padding      zero
+    [10..65] samples[14]  u32 LE, one per sample slot
+    [66..67] checksum     sum of bytes [0..65] (u16 LE)
+    [68..69] padding      zero
 
 Host commands (host -> device, raw bytes):
     0x01            start sampling
@@ -23,10 +23,11 @@ Host commands (host -> device, raw bytes):
                     stream (mixed in between telemetry frames)
 
 Default sample slots (uplink_sampler_init):
-    0 PLAY_TIME_SECONDS   1 PLAY_TIME_FRAME_COUNTER   2 start_time
-    3 file_timer          4 hud_display_mode          5 REG_MCCNT1
-    6 REG_MCCNT0          7 uplink_frames_sent        8 uplink_frames_dropped
-    9 uplink_card_lock_skips
+    0  PLAY_TIME_SECONDS           1  PLAY_TIME_FRAME_COUNTER     2  SCENARIO_MAIN_FLAG_MAIN
+    3  SCENARIO_MAIN_FLAG_SUB      4  REQUEST_CLEAR_COUNT         5  REQUEST_CLEAR_COUNT_U16
+    6  magic_number                7  overlay1_start              8  dungeon_ptr
+    9  script_id_part1             10 script_id_part2             11 dungeon_is_clearing_floor
+    12 dungeon_current_dungeon_id  13 dungeon_current_floor
 
 If the device disconnects mid-run (e.g. a soft reset reboots the NDS), the
 reader waits for it to re-enumerate, reopens the port, and re-sends START
@@ -44,8 +45,8 @@ import sys
 import time
 
 MAGIC = b'PM'
-FRAME_LEN = 54
-SAMPLE_COUNT = 10
+FRAME_LEN = 70
+SAMPLE_COUNT = 14
 UPLINK_VID = 0x2020
 UPLINK_PID = 0xD801
 
@@ -62,9 +63,11 @@ OPEN_SETTLE_S = 0.5
 SILENCE_WATCHDOG_S = 3.0
 
 DEFAULT_SLOT_NAMES = [
-    'PLAY_TIME_SECONDS', 'PLAY_TIME_FRAME_COUNTER', 'start_time',
-    'file_timer', 'hud_display_mode', 'REG_MCCNT1', 'REG_MCCNT0',
-    'uplink_frames_sent', 'uplink_frames_dropped', 'uplink_card_lock_skips',
+    'PLAY_TIME_SECONDS', 'PLAY_TIME_FRAME_COUNTER', 'SCENARIO_MAIN_FLAG_MAIN',
+    'SCENARIO_MAIN_FLAG_SUB', 'REQUEST_CLEAR_COUNT', 'REQUEST_CLEAR_COUNT_U16',
+    'magic_number', 'overlay1_start', 'dungeon_ptr',
+    'script_id_part1', 'script_id_part2', 'dungeon_is_clearing_floor',
+    'dungeon_current_dungeon_id', 'dungeon_current_floor',
 ]
 
 
@@ -97,7 +100,7 @@ def parse_args(argv):
     p.add_argument('--stop', action='store_true', help='send STOP (0x02) after opening')
     p.add_argument('--ping', action='store_true', help='send PING (0x04) after opening')
     p.add_argument('--set-addr', nargs=2, metavar=('SLOT', 'ADDR'), action='append',
-                   help='retarget sample slot (0-9) to ADDR (hex); repeatable')
+                   help='retarget sample slot (0-13) to ADDR (hex); repeatable')
     p.add_argument('--duration', type=float, metavar='SECONDS',
                    help='stop reading after this many seconds (default: Ctrl+C)')
     p.add_argument('-v', '--verbose', action='store_true', help='print every frame')
@@ -145,7 +148,7 @@ class Stats:
 
 def process_frame(frame, stats, csv_file, args):
     seq, gf = struct.unpack_from('<II', frame, 2)
-    samples = struct.unpack_from('<10I', frame, 10)
+    samples = struct.unpack_from('<14I', frame, 10)
     stats.frames += 1
     stats.note_seq(seq)
 
@@ -159,9 +162,8 @@ def process_frame(frame, stats, csv_file, args):
         print('seq=%-9d %s  %s' % (seq, fmt_game_frame(gf), s))
     elif not args.quiet and stats.frames % 300 == 1:
         # periodic one-liner: every 300 frames (~5 s at 60 Hz)
-        print('.. seq=%d game=%d:%02d:%02d sent=%d drop=%d'
-              % (seq, gf // 3600, (gf // 60) % 60, gf % 60,
-                 samples[7], samples[8]))
+        print('.. seq=%d game=%d:%02d:%02d'
+              % (seq, gf // 3600, (gf // 60) % 60, gf % 60))
 
 
 def handle_stray(data, stats):
@@ -183,7 +185,7 @@ def parse_set_addr(args):
             idx = int(slot)
             value = int(addr, 0)
         except ValueError:
-            sys.exit('--set-addr takes SLOT (0-9) and ADDR (hex)')
+            sys.exit('--set-addr takes SLOT (0-13) and ADDR (hex)')
         if not 0 <= idx <= SAMPLE_COUNT - 1:
             sys.exit('sample slot out of range: %d' % idx)
         out.append((idx, value))
@@ -353,8 +355,8 @@ def main(argv=None):
                     break
                 frame = bytes(buf[:FRAME_LEN])
                 del buf[:FRAME_LEN]
-                stored, = struct.unpack_from('<H', frame, 50)
-                if sum(frame[:50]) & 0xFFFF != stored:
+                stored, = struct.unpack_from('<H', frame, 66)
+                if sum(frame[:66]) & 0xFFFF != stored:
                     stats.bad_checksum += 1
                     buf.insert(0, 0x50)  # 'P': resync one byte later
                     continue

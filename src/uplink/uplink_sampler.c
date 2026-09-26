@@ -1,33 +1,33 @@
 #include "uplink_sampler.h"
-#include "dspico_card.h"
 
 // Game RAM + mod globals used by the default sample table. They are
-// re-declared here (instead of including pmdsky.h / timer.h /
-// speedrun_hud.h) with types that exactly match their definitions, because
-// this translation unit must stay compatible with the standard fixed-width
-// types (pmdsky.h self-defines conflicting typedefs and a bool macro).
+// re-declared here (instead of including pmdsky.h) with types that exactly
+// match their definitions, because this translation unit must stay
+// compatible with the standard fixed-width types (pmdsky.h self-defines
+// conflicting typedefs and a bool macro).
 //   PLAY_TIME_SECONDS / PLAY_TIME_FRAME_COUNTER: pmdsky data/ram.h
 //     (EU 0x022ABFD4 / 0x022ABFD8, resolved via the linker script)
-//   start_time / file_timer: src/timer.c
-//   hud_display_mode: src/speedrun_hud.c
 extern unsigned int PLAY_TIME_SECONDS;
 extern unsigned char PLAY_TIME_FRAME_COUNTER;
 
-struct play_time { // mirror of pmdsky types/common/common.h (8 bytes)
-  unsigned int seconds;
-  unsigned char frames;
-  unsigned char _padding[3];
-};
-extern struct play_time start_time;
-extern unsigned char file_timer; // bool in timer.c (pmdsky uint8_t)
+// Fixed EU (0x02xxxxxx) game-memory addresses for the default sample table.
+// (The mod docs list the short forms, e.g. 0x2ABFD8 == 0x022ABFD8; the
+// dungeon_ptr value 0x02354138 was cross-checked against the DUNGEON_PTR
+// symbol in the debug headers.)
+#define ADDR_SCENARIO_MAIN_FLAG_MAIN 0x022ABAA8u
+#define ADDR_SCENARIO_MAIN_FLAG_SUB  0x022ABAA9u
+#define ADDR_REQUEST_CLEAR_COUNT     0x022ABADBu
+#define ADDR_REQUEST_CLEAR_COUNT_U16 0x022A40E4u
+#define ADDR_MAGIC_NUMBER            0x022A3670u
+#define ADDR_OVERLAY1_START          0x02329D40u
+#define ADDR_DUNGEON_PTR             0x02354138u
+#define ADDR_SCRIPT_ID_PART1         0x02325ACAu
+#define ADDR_SCRIPT_ID_PART2         0x02325ACEu
 
-enum hud_display_mode { // mirror of src/speedrun_hud.h
-  HUD_DISPLAY_NONE = 0,
-  HUD_DISPLAY_MINIMAL = 1,
-  HUD_DISPLAY_MAXIMAL = 2,
-  HUD_DISPLAY_COUNT
-};
-extern enum hud_display_mode hud_display_mode;
+// Offsets from dungeon_ptr (see pmdsky-debug/headers/.../dungeon_mode/dungeon.h)
+#define DUNGEON_OFF_IS_CLEARING_FLOOR 0x006u
+#define DUNGEON_OFF_CURRENT_DUNGEON_ID 0x748u
+#define DUNGEON_OFF_CURRENT_FLOOR      0x749u
 
 uint32_t uplink_frames_sent = 0;
 uint32_t uplink_frames_dropped = 0;
@@ -35,14 +35,33 @@ uint32_t uplink_card_lock_skips = 0;
 uint32_t uplink_card_lock_waits = 0;
 uint32_t uplink_card_busy_timeouts = 0;
 
+// One sample slot. `address` is either an absolute ARM9 address (direct
+// read) or an offset from the current dungeon_ptr (via_dungeon_ptr slots).
+// `width` is the read width (1, 2 or 4); narrower values are zero-extended
+// into the u32 slot. address == 0 disables the slot.
 static struct {
-  uint32_t address; // 0 = disabled
+  uint32_t address;
+  uint8_t width;
+  uint8_t via_dungeon_ptr;
 } s_samples[UPLINK_SAMPLE_COUNT];
 
 static uint32_t s_seq = 0;
 
 static uint8_t s_block[UPLINK_FRAMES_PER_BLOCK * UPLINK_FRAME_LEN];
 static uint32_t s_block_len = 0;
+
+static void slot_set(uint8_t index, uint32_t address, uint8_t width,
+                     uint8_t via_dungeon_ptr) {
+  s_samples[index].address = address;
+  s_samples[index].width = width;
+  s_samples[index].via_dungeon_ptr = via_dungeon_ptr;
+}
+
+// A dungeon pointer is only dereferenced while it stays inside ARM9 WRAM
+// (0x02000000-0x023FFFFF) with margin for the largest offset below (0x749).
+static uint32_t valid_dungeon_ptr(uint32_t p) {
+  return (p >= 0x02000000u && p < 0x023F8000u) ? p : 0;
+}
 
 void uplink_sampler_init(void) {
   uplink_frames_sent = 0;
@@ -53,17 +72,35 @@ void uplink_sampler_init(void) {
   s_seq = 0;
   s_block_len = 0;
 
-  // Default table: the speedrun-critical clocks plus uplink self-observability
-  s_samples[0].address = (uint32_t)&PLAY_TIME_SECONDS;
-  s_samples[1].address = (uint32_t)&PLAY_TIME_FRAME_COUNTER;
-  s_samples[2].address = (uint32_t)&start_time;
-  s_samples[3].address = (uint32_t)&file_timer;
-  s_samples[4].address = (uint32_t)&hud_display_mode;
-  s_samples[5].address = (uint32_t)&REG_MCCNT1; // card busy/latency visibility
-  s_samples[6].address = (uint32_t)&REG_MCCNT0;
-  s_samples[7].address = (uint32_t)&uplink_frames_sent;
-  s_samples[8].address = (uint32_t)&uplink_frames_dropped;
-  s_samples[9].address = (uint32_t)&uplink_card_lock_skips;
+  // Default table (one value per slot, narrower values zero-extended):
+  //  0 PLAY_TIME_SECONDS          u32 @ &PLAY_TIME_SECONDS (linker-resolved)
+  //  1 PLAY_TIME_FRAME_COUNTER    u8  @ &PLAY_TIME_FRAME_COUNTER
+  //  2 SCENARIO_MAIN_FLAG_MAIN    u8  @ 0x022ABAA8
+  //  3 SCENARIO_MAIN_FLAG_SUB     u8  @ 0x022ABAA9
+  //  4 REQUEST_CLEAR_COUNT        u8  @ 0x022ABADB
+  //  5 REQUEST_CLEAR_COUNT_U16    u16 @ 0x022A40E4
+  //  6 magic_number               u32 @ 0x022A3670
+  //  7 overlay1_start             u16 @ 0x02329D40
+  //  8 dungeon_ptr                u32 @ 0x02354138
+  //  9 current_script_id_part1    u32 @ 0x02325ACA
+  // 10 current_script_id_part2    u32 @ 0x02325ACE
+  // 11 is_clearing_floor          u8  @ dungeon_ptr + 0x6
+  // 12 current_dungeon_id         u8  @ dungeon_ptr + 0x748
+  // 13 current_floor              u8  @ dungeon_ptr + 0x749
+  slot_set(0, (uint32_t)&PLAY_TIME_SECONDS, 4, 0);
+  slot_set(1, (uint32_t)&PLAY_TIME_FRAME_COUNTER, 1, 0);
+  slot_set(2, ADDR_SCENARIO_MAIN_FLAG_MAIN, 1, 0);
+  slot_set(3, ADDR_SCENARIO_MAIN_FLAG_SUB, 1, 0);
+  slot_set(4, ADDR_REQUEST_CLEAR_COUNT, 1, 0);
+  slot_set(5, ADDR_REQUEST_CLEAR_COUNT_U16, 2, 0);
+  slot_set(6, ADDR_MAGIC_NUMBER, 4, 0);
+  slot_set(7, ADDR_OVERLAY1_START, 2, 0);
+  slot_set(8, ADDR_DUNGEON_PTR, 4, 0);
+  slot_set(9, ADDR_SCRIPT_ID_PART1, 4, 0);
+  slot_set(10, ADDR_SCRIPT_ID_PART2, 4, 0);
+  slot_set(11, DUNGEON_OFF_IS_CLEARING_FLOOR, 1, 1);
+  slot_set(12, DUNGEON_OFF_CURRENT_DUNGEON_ID, 1, 1);
+  slot_set(13, DUNGEON_OFF_CURRENT_FLOOR, 1, 1);
 }
 
 void uplink_sampler_tick(void) {
@@ -78,17 +115,42 @@ void uplink_sampler_tick(void) {
   f->seq = s_seq++;
   f->game_frame = (uint32_t)PLAY_TIME_SECONDS * 60u + PLAY_TIME_FRAME_COUNTER;
 
+  // Resolve the dungeon pointer once per frame; pointer-derived slots read
+  // through it and zero out when it is not valid ARM9 RAM (menus, before
+  // dungeon init). The dungeon_ptr slot reports the raw value either way.
+  uint32_t dungeon = valid_dungeon_ptr(*(volatile uint32_t*)ADDR_DUNGEON_PTR);
+
   for (uint8_t i = 0; i < UPLINK_SAMPLE_COUNT; i++) {
-    f->samples[i] = s_samples[i].address
-        ? *(volatile uint32_t*)s_samples[i].address
-        : 0;
+    uint32_t addr = s_samples[i].address;
+    if (!addr) {
+      f->samples[i] = 0;
+      continue;
+    }
+    if (s_samples[i].via_dungeon_ptr) {
+      if (!dungeon) {
+        f->samples[i] = 0;
+        continue;
+      }
+      addr += dungeon;
+    }
+    switch (s_samples[i].width) {
+      case 1:
+        f->samples[i] = *(volatile uint8_t*)addr;
+        break;
+      case 2:
+        f->samples[i] = *(volatile uint16_t*)addr;
+        break;
+      default:
+        f->samples[i] = *(volatile uint32_t*)addr;
+        break;
+    }
   }
 
   uint8_t* p = (uint8_t*)f;
   uint16_t sum = 0;
   // Checksum covers everything before the checksum field itself. The two
-  // bytes after it are zero padding (UPLINK_FRAME_LEN is 54, the packed
-  // struct is 52; the padding keeps 9 frames at 486 bytes per block).
+  // bytes after it are zero padding (UPLINK_FRAME_LEN is 70, the packed
+  // struct is 68).
   for (uint32_t i = 0; i < UPLINK_FRAME_LEN - 4; i++) {
     sum += p[i];
   }
@@ -120,7 +182,9 @@ bool uplink_sampler_set_addr(uint8_t index, uint32_t addr) {
   if (index >= UPLINK_SAMPLE_COUNT) {
     return false;
   }
-  s_samples[index].address = addr;
+  // Retargeting resets the slot to a plain width-4 direct read of addr
+  // (any pointer-derived slot semantics are discarded); addr == 0 disables.
+  slot_set(index, addr, 4, 0);
   return true;
 }
 
@@ -128,6 +192,8 @@ uint32_t uplink_sampler_get_addr(uint8_t index) {
   if (index >= UPLINK_SAMPLE_COUNT) {
     return 0;
   }
+  // Direct slots report the absolute address; pointer-derived slots report
+  // their dungeon_ptr offset.
   return s_samples[index].address;
 }
 

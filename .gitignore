@@ -14,5 +14,6 @@ out.*
 *.mln
 
 symbols/generated_*.ld
-uplink-reader/bin/
-uplink-reader/obj/
+PMD_EoS_Uplink_Reader/bin/
+PMD_EoS_Uplink_Reader/obj/
+PMD_EoS_Uplink_Reader/.vs/
