@@ -51,6 +51,26 @@ The port list in the GUI auto-refreshes every 3 s (new ports, VID/PID
 changes, unplug/replug); the Refresh button remains for an immediate
 refresh.
 
+## Memory marker (for external memory scanners)
+
+`UplinkMemoryMarker` (Protocol/UplinkMemoryMarker.cs) mirrors every
+validated frame into one static 66-byte block so a separate process can
+locate the latest frame by byte pattern:
+
+| offset | size | content |
+|-------:|-----:|---------|
+| 0 | 8 | magic `50 4D 55 50 4C 49 4E 4B` ("PMUPLINK") |
+| 8 | 54 | raw wire frame (PM, seq, game_frame, samples[10], checksum, pad), little-endian |
+| 62 | 4 | seqlock u32 (LE): odd = a frame copy is in progress, even = stable snapshot |
+
+The block is a `static readonly byte[]` (a GC root in the non-compacting
+.NET heap), so its address is fixed for the lifetime of the process but
+differs between launches - scan for the magic at runtime. The frame at
+offset 8 is the exact 54 bytes the device sent; for a consistent snapshot
+read the seqlock at offset 62 before and after the frame read (require it
+to be even and unchanged), or just validate the frame's own checksum,
+which torn reads fail.
+
 ## Notes
 
 - Config (auto-connect + last port) is stored in the platform app-data

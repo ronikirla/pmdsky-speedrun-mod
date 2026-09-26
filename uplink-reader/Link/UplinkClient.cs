@@ -265,6 +265,7 @@ public sealed class UplinkClient : IDisposable
         if (!UplinkProtocol.TryParseFrame(frame, out uint seq, out uint gameFrame, samples))
             return; // the processor already validated; belt and braces
 
+        UplinkMemoryMarker.Update(frame); // publish for external memory scanners
         var sample = new UplinkSample
         {
             Seq = seq,
