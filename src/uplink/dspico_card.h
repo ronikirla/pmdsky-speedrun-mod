@@ -152,11 +152,8 @@ void   dspico_card_cpu_write(const void* src, uint32_t words, uint32_t valid_byt
 
 // Acquire the game card lock. Returns the lock id, or 0 if no lock was
 // available (caller must skip the operation).
-uint16_t dspico_card_lock_acquire(void);
+//uint16_t dspico_card_lock_acquire(void);
 void     dspico_card_lock_release(uint16_t lock_id);
 
-// Acquire the game card lock. Returns the lock id, or 0 on failure (shutdown
-// requested, called from IRQ mode, no lock ID free, or the card never became
-// free). Callers MUST check for 0 and abandon the transaction.
 uint16_t dspico_card_lock_wait(void);
 

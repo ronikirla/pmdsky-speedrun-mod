@@ -369,13 +369,3 @@ void UplinkPoll(void) {
 #endif
 }
 
-void UplinkShutdown(void) {
-  if (!s_inited) return;
-  s_inited = false;    // UplinkPoll becomes a no-op
-  s_sampling = false;
-#if UPLINK_DISCONNECT_ON_RESET
-  uplink_local_send_cmd(DSPICO_CMD_USB_COMMAND_DISCONNECT);
-#endif
-}
-
-

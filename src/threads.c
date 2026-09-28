@@ -37,7 +37,6 @@ __attribute__((used)) void InitThreads(void) {
                   STACK_SIZE_4KB, MAIN_ROUTINE_THREAD_PRIO);
   // Bring up the DSpico USB uplink (card lock is held briefly per
   // transaction; the game's own card I/O is never disturbed)
-  UplinkInit();
 }
 
 __attribute__((used)) void WakeupThreads(void) {
@@ -61,6 +60,8 @@ void VCount0Routine(void*) {
 // mod by only running it while we would be sleeping
 void MainRoutine(void*) {
   while (true) {
+    // will only init if it isn't elready and if certain overlays are loaded
+    UplinkInit();
     HandleSoftReset();
     HandleHUDToggle();
     HandleSpeedToggle();
