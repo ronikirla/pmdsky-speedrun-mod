@@ -13,10 +13,11 @@ void HandleSoftReset(void)
 
   if (held_buttons.l && held_buttons.r && held_buttons.start && held_buttons.select)
   {
+    UplinkShutdown();
     if (IsFixedRNG())
     {
       SaveRNGSeedForSoftReset();
     }
-    OS_ResetSystem(0);
+    OS_ResetSystem(1);
   }
 }

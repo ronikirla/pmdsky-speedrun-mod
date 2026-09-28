@@ -57,6 +57,10 @@
 #define MCCNT1_DIR_WRITE      (1 << 30)
 #define MCCNT1_ENABLE         (1 << 31)  // doubles as the busy bit
 
+#define DSPICO_LOCK_ID_SPINS   1000
+#define DSPICO_BUSY_SPINS      2000000  // ~0.3 s worst case at 67 MHz, tune
+#define OS_MODE_IRQ            0x12
+
 //--------------------------------------------------------------------+
 // DSpico USB protocol (DSpicoUsb.h from the LNH-team examples)
 //--------------------------------------------------------------------+
@@ -115,6 +119,7 @@ int    OS_GetLockID(void);        // 0x020793C4, returns -1 when no lock is free
 void   OS_ReleaseLockId(int id);  // 0x0207942C
 void   Card_LockRom(uint16_t id); // 0x020837CC, waits until the card is free
 void   Card_UnlockRom(uint16_t id); // 0x020837E8
+uint32_t OS_GetProcMode(void);    // 0x0207BBE0
 
 //--------------------------------------------------------------------+
 // Primitive card operations (no locking; caller must hold the lock)
@@ -128,6 +133,8 @@ bool   dspico_card_is_busy(void);      // MCCNT1 bit 31
 void   dspico_card_wait_busy(void);
 bool   dspico_card_is_data_ready(void); // MCCNT1 bit 23
 uint32_t dspico_card_get_data(void);   // read REG_MCD1
+// Uplink calls this before a reset. Afterwards lock_wait always returns 0.
+void dspico_card_set_shutdown(bool shutdown);
 
 // CPU data-phase transfers. `words` is a 32-bit word count (LEN_512 == 512
 // bytes == 128 words). Both loop until the busy bit clears, feeding or
@@ -148,10 +155,8 @@ void   dspico_card_cpu_write(const void* src, uint32_t words, uint32_t valid_byt
 uint16_t dspico_card_lock_acquire(void);
 void     dspico_card_lock_release(uint16_t lock_id);
 
-// Acquire the game card lock, blocking until a lock id is free and the
-// card is held. DSpico protocol integrity requires that card transactions
-// are never skipped mid-pipeline (a skipped block would desynchronize the
-// DSpico's double-buffer state). The game's own card I/O is short-lived,
-// so this returns promptly.
+// Acquire the game card lock. Returns the lock id, or 0 on failure (shutdown
+// requested, called from IRQ mode, no lock ID free, or the card never became
+// free). Callers MUST check for 0 and abandon the transaction.
 uint16_t dspico_card_lock_wait(void);
 

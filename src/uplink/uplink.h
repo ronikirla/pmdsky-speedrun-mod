@@ -6,6 +6,11 @@
 //   - UplinkPoll()  called from the mod's MainRoutine (~60 Hz, lowest-prio)
 #pragma once
 
+// Set to 1 to also tell the DSpico firmware to drop the USB link on reset.
+#ifndef UPLINK_DISCONNECT_ON_RESET
+#define UPLINK_DISCONNECT_ON_RESET 0
+#endif
+
 // UPLINK_LOCAL_CDC: 1 (default) -> the DSpico firmware runs the TinyUSB
 // CDC-ACM device stack locally (dspico-firmware/src/usb_cdc_bridge.c):
 // enumeration and CDC pumping happen on the RP2040, the NDS only samples
@@ -23,3 +28,6 @@ void UplinkInit(void);
 // One poll iteration: drain DSpico events, run the TinyUSB task, sample.
 // No-op until UplinkInit() has run.
 void UplinkPoll(void);
+
+// Stop all card activity. Call before OS_ResetSystem. Irreversible until reboot.
+void UplinkShutdown(void);

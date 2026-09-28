@@ -37,7 +37,7 @@
 
 #define UPLINK_SAMPLE_COUNT   14
 #define UPLINK_FRAME_LEN      70
-#define UPLINK_FRAMES_PER_BLOCK 7
+#define UPLINK_FRAMES_PER_BLOCK 1
 
 struct uplink_frame {
   uint8_t magic[2];
@@ -59,6 +59,8 @@ void uplink_sampler_init(void);
 
 // Read the sample table and append one frame to the staging block
 void uplink_sampler_tick(void);
+
+static uint32_t read_bytewise(uint32_t addr, uint8_t width);
 
 // Copy the staged block into dst (up to UPLINK_FRAME_LEN * FRAMES_PER_BLOCK),
 // reset the staging area, and return the number of valid bytes

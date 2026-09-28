@@ -133,17 +133,21 @@ void uplink_sampler_tick(void) {
       }
       addr += dungeon;
     }
-    switch (s_samples[i].width) {
-      case 1:
-        f->samples[i] = *(volatile uint8_t*)addr;
-        break;
-      case 2:
-        f->samples[i] = *(volatile uint16_t*)addr;
-        break;
-      default:
-        f->samples[i] = *(volatile uint32_t*)addr;
-        break;
+
+    uint8_t w = s_samples[i].width;
+    if (w != 1 && w != 2) {
+      w = 4;
     }
+    if (addr & (w - 1)) {
+      f->samples[i] = read_bytewise(addr, w);   // misaligned
+    } else if (w == 1) {
+      f->samples[i] = *(volatile uint8_t*)addr;
+    } else if (w == 2) {
+      f->samples[i] = *(volatile uint16_t*)addr;
+    } else {
+      f->samples[i] = *(volatile uint32_t*)addr;
+    }
+
   }
 
   uint8_t* p = (uint8_t*)f;
@@ -157,6 +161,17 @@ void uplink_sampler_tick(void) {
   f->checksum = sum;
 
   s_block_len += UPLINK_FRAME_LEN;
+}
+
+// Assemble a value from single-byte reads, little-endian. Safe for any
+// address: ARM9 unaligned LDR/LDRH rotate instead of reading across the
+// word boundary, so misaligned addresses must not use wide loads.
+static uint32_t read_bytewise(uint32_t addr, uint8_t width) {
+  uint32_t v = 0;
+  for (uint8_t b = 0; b < width; b++) {
+    v |= (uint32_t)*(volatile uint8_t*)(addr + b) << (8 * b);
+  }
+  return v;
 }
 
 uint32_t uplink_sampler_flush_block(uint8_t* dst) {
