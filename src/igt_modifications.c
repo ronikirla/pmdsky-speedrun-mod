@@ -37,13 +37,13 @@ __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
     // Still in resume delay period
     resume_delay_remaining--;
   } else if (!just_finished_run) {
-    struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
+    struct play_time* igt = &PLAY_TIME;
     // Set start time to current igt if we reset the timer in the menu
     bool advance_start_time = false;
     if (IGTDifferenceFrames(igt, &start_time) == 0) {
       advance_start_time = true;
     }
-    PlayTimerTick((struct play_time*) &PLAY_TIME_SECONDS);
+    PlayTimerTick(igt);
     if (advance_start_time) {
       memcpy(&start_time, igt, sizeof(struct play_time));
     }

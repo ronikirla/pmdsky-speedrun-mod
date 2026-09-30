@@ -50,7 +50,7 @@ void CalculateFPS(void) {
   static struct play_time prev_frames[MONITORING_WINDOW];
   static int idx = 0;
 
-  struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
+  struct play_time* igt = &PLAY_TIME;
   last_frame = curr_frame;
   curr_frame = igt->frames;
   #ifdef LAG_TEST

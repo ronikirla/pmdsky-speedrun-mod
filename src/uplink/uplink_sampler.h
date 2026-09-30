@@ -31,7 +31,7 @@
 #pragma once
 
 // Same type-separation rule as dspico_card.h: standard types only, no
-// <pmdsky.h> (this header is included by TinyUSB-using translation units).
+// <pmdsky.h>.
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -59,8 +59,6 @@ void uplink_sampler_init(void);
 
 // Read the sample table and append one frame to the staging block
 void uplink_sampler_tick(void);
-
-static uint32_t read_bytewise(uint32_t addr, uint8_t width);
 
 // Copy the staged block into dst (up to UPLINK_FRAME_LEN * FRAMES_PER_BLOCK),
 // reset the staging area, and return the number of valid bytes

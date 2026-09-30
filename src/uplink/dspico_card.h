@@ -15,10 +15,10 @@
 // IMPORTANT: this header must stay free of <pmdsky.h>. The pmdsky-debug
 // headers self-define uint8_t/uint32_t/bool/size_t (Ghidra-style, without
 // <stdint.h>), which hard-conflicts with the standard fixed-width types
-// that TinyUSB pulls in via <stdint.h>/<stdbool.h> (in this toolchain
-// uint32_t is `unsigned long`, while pmdsky.h typedefs it `unsigned int`).
-// Every uplink header therefore uses the standard types; pmdsky.h is only
-// included by translation units that never touch TinyUSB.
+// from <stdint.h>/<stdbool.h> (in this toolchain uint32_t is
+// `unsigned long`, while pmdsky.h typedefs it `unsigned int`). Every
+// uplink header therefore uses the standard types; pmdsky.h is only
+// included by translation units that never include the uplink headers.
 #include <stdbool.h>
 #include <stdint.h>
 

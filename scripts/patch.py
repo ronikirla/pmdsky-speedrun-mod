@@ -14,11 +14,9 @@ OVERLAY_INDEX = 36
 # see https://docs.google.com/document/d/1Rs4icdYtiM6KYnWxMkdlw7jpWrH7qw5v6LOfDWIiYho
 START_ADDRESS = 0x23D7FF0 
 
-# The uplink (TinyUSB CDC over DSpico) is linked before the mod, in the
-# overlay 36 headroom region. out.bin therefore spans:
-#   [0x23A8000, 0x23D7FF0)  uplink blob
-#   [0x23D7FF0, ...        ) existing mod
-BINARY_START_ADDRESS = 0x23A8000
+# out.bin is linked at START_ADDRESS and covers the whole mod (including
+# the uplink card-protocol + sampler code, which shares the same region).
+BINARY_START_ADDRESS = START_ADDRESS
 
 region = sys.argv[1]
 rom_path = sys.argv[2]
@@ -60,10 +58,9 @@ def apply_overlay():
   with open(overlay_bin_path, "rb") as f:
     custom_code_bytes = f.read()
 
-  # The binary starts at BINARY_START_ADDRESS (uplink region) and covers
-  # both the uplink blob and the mod at START_ADDRESS. Place it at its
-  # absolute offset from the overlay RAM start; the original overlay bytes
-  # (offset 0 .. ~0xF80) are preserved.
+  # The binary starts at BINARY_START_ADDRESS and covers the whole mod.
+  # Place it at its absolute offset from the overlay RAM start; the
+  # original overlay bytes (offset 0 .. ~0xF80) are preserved.
   offset = BINARY_START_ADDRESS - overlay.ramAddress
   assert offset > 0, "BINARY_START_ADDRESS must be after the overlay RAM start"
   total = offset + len(custom_code_bytes)

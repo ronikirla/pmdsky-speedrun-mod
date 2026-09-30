@@ -103,6 +103,17 @@ void uplink_sampler_init(void) {
   slot_set(13, DUNGEON_OFF_CURRENT_FLOOR, 1, 1);
 }
 
+// Assemble a value from single-byte reads, little-endian. Safe for any
+// address: ARM9 unaligned LDR/LDRH rotate instead of reading across the
+// word boundary, so misaligned addresses must not use wide loads.
+static uint32_t read_bytewise(uint32_t addr, uint8_t width) {
+  uint32_t v = 0;
+  for (uint8_t b = 0; b < width; b++) {
+    v |= (uint32_t)*(volatile uint8_t*)(addr + b) << (8 * b);
+  }
+  return v;
+}
+
 void uplink_sampler_tick(void) {
   if (s_block_len >= sizeof(s_block)) {
     uplink_frames_dropped += UPLINK_FRAMES_PER_BLOCK; // block not flushed in time
@@ -163,22 +174,10 @@ void uplink_sampler_tick(void) {
   s_block_len += UPLINK_FRAME_LEN;
 }
 
-// Assemble a value from single-byte reads, little-endian. Safe for any
-// address: ARM9 unaligned LDR/LDRH rotate instead of reading across the
-// word boundary, so misaligned addresses must not use wide loads.
-static uint32_t read_bytewise(uint32_t addr, uint8_t width) {
-  uint32_t v = 0;
-  for (uint8_t b = 0; b < width; b++) {
-    v |= (uint32_t)*(volatile uint8_t*)(addr + b) << (8 * b);
-  }
-  return v;
-}
-
 uint32_t uplink_sampler_flush_block(uint8_t* dst) {
   uint32_t len = s_block_len;
   if (len > 0) {
-    // byte-wise copy: dst is a TinyUSB buffer, both sides are 4-aligned but
-    // keep it simple and safe
+    // byte-wise copy: dst is a 512-byte DSpico card block buffer
     uint8_t* d = dst;
     uint8_t* s = s_block;
     for (uint32_t i = 0; i < len; i++) {

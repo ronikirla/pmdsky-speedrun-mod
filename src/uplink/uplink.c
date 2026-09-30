@@ -1,35 +1,18 @@
 #include "uplink.h"
-#include "tusb.h"
-#include "usb_descriptors.h"
 #include "dspico_card.h"
 #include "uplink_sampler.h"
 
-extern void dspico_dcd_poll(void); // dcd_dspico.c
+#include <string.h>
 
 static bool s_inited = false;
 static bool s_sampling = false;
 
 //--------------------------------------------------------------------+
-// USB descriptor callbacks (TinyUSB device)
+// Firmware protocol: the TinyUSB device stack runs in the DSpico firmware
+// (usb_cdc_bridge.c). The NDS never calls into TinyUSB; it ships sample
+// blocks over WRITE_DATA (0xE9) and polls a status block plus host RX
+// over READ_DATA (0xEA).
 //--------------------------------------------------------------------+
-
-uint8_t const* tud_descriptor_device_cb(void) {
-  return (uint8_t const*)uplink_descriptor_device;
-}
-
-uint8_t const* tud_descriptor_configuration_cb(uint8_t index) {
-  (void) index;
-  return (uint8_t const*)uplink_descriptor_configuration;
-}
-
-//--------------------------------------------------------------------+
-// Local CDC mode (UPLINK_LOCAL_CDC): the TinyUSB device stack runs in the
-// DSpico firmware (usb_cdc_bridge.c). The NDS never calls into TinyUSB;
-// it ships sample blocks over WRITE_DATA (0xE9) and polls a status block
-// plus host RX over READ_DATA (0xEA).
-//--------------------------------------------------------------------+
-
-#if UPLINK_LOCAL_CDC
 
 // 0xEA endpoint field selects the returned 512-byte block content:
 #define UPLINK_LOCAL_STATUS_EP  0
@@ -124,8 +107,6 @@ static void uplink_send_host_reply(const uint8_t* data, uint32_t len) {
   s_tx_stage_len += len;
 }
 
-#endif // UPLINK_LOCAL_CDC
-
 //--------------------------------------------------------------------+
 // Host command protocol (PC -> NDS over CDC):
 //   [0x01]           start sampling
@@ -139,15 +120,15 @@ static uint32_t uplink_le32(uint8_t const* p) {
 }
 
 // Minimal decimal formatting (no libc on the NDS)
-static uint8_t uplink_utoa(uint32_t v, char* out) {
-  char tmp[12];
+static uint8_t uplink_utoa(uint32_t v, uint8_t* out) {
+  uint8_t tmp[12];
   uint8_t n = 0;
   if (v == 0) {
     out[0] = '0';
     return 1;
   }
   while (v > 0) {
-    tmp[n++] = (char)('0' + v % 10);
+    tmp[n++] = (uint8_t)('0' + v % 10);
     v /= 10;
   }
   for (uint8_t i = 0; i < n; i++) {
@@ -188,11 +169,7 @@ static void uplink_handle_host_command(uint8_t const* buf, uint16_t len) {
       n += uplink_utoa(uplink_frames_dropped, p + n);
       p[n++] = '\r';
       p[n++] = '\n';
-#if UPLINK_LOCAL_CDC
       uplink_send_host_reply((uint8_t*)msg, n);
-#else
-      tud_cdc_write((uint8_t*)msg, n);
-#endif
       break;
     }
     default:
@@ -200,11 +177,9 @@ static void uplink_handle_host_command(uint8_t const* buf, uint16_t len) {
   }
 }
 
-// CDC receive: in this TinyUSB (0.17, LNH fork) the class driver copies OUT
-// packets into a FIFO and invokes tud_cdc_rx_cb(itf); the app drains it with
-// tud_cdc_n_read(). Commands are parsed from a byte stream (two commands may
-// share one USB packet), so bytes are accumulated and complete commands are
-// emitted as they become available.
+// Host command stream parsing. Commands arrive as a byte stream over the
+// firmware RX ring (two commands may share one 512-byte block), so bytes are
+// accumulated and complete commands are emitted as they become available.
 static uint8_t s_cmd[6]; // longest command: SET_ADDR (0x03 idx u32) = 6 bytes
 static uint8_t s_cmd_len = 0;
 
@@ -257,18 +232,6 @@ static void uplink_cmd_feed(const uint8_t* data, uint32_t len) {
   uplink_cmd_parse();
 }
 
-// TinyUSB application callback (weak symbol in cdc_device.h); legacy path.
-void tud_cdc_rx_cb(uint8_t itf) {
-  uint8_t buf[64];
-  for (;;) {
-    uint32_t n = tud_cdc_n_read(itf, buf, sizeof(buf));
-    if (n == 0) {
-      return;
-    }
-    uplink_cmd_feed(buf, n);
-  }
-}
-
 //--------------------------------------------------------------------+
 // Public API
 //--------------------------------------------------------------------+
@@ -279,24 +242,11 @@ void UplinkInit(void) {
   }
   uplink_sampler_init();
 
-#if UPLINK_LOCAL_CDC
   // Hand USB enumeration over to the DSpico firmware: its local TinyUSB
   // stack (usb_cdc_bridge.c) initializes the RP2040 SIE and pulls up D+.
-  // The NDS keeps no TinyUSB state; UplinkPoll() ships sample blocks and
-  // polls the firmware status block.
+  // The NDS keeps no USB state; UplinkPoll() ships sample blocks and polls
+  // the firmware status block.
   uplink_local_send_cmd(DSPICO_CMD_USB_COMMAND_LOCAL_STACK);
-#else
-  tusb_rhport_init_t init = {
-    .role = TUSB_ROLE_DEVICE,
-    .speed = TUSB_SPEED_AUTO,
-  };
-  // tusb_init -> usbd_init -> dcd_init (DSpico INIT command). This
-  // TinyUSB fork never connects on its own (dcd_connect() is only
-  // reachable via tud_connect()), so assert the DSpico's D+ pull-up
-  // explicitly - without it the host can never detect the device.
-  tusb_init(0, &init);
-  tud_connect();
-#endif
 
   s_sampling = true; // auto-start; host can pause with 0x02
   s_inited = true;
@@ -307,7 +257,6 @@ void UplinkPoll(void) {
     return;
   }
 
-#if UPLINK_LOCAL_CDC
   // 1. Flush staged host replies (PING)
   if (s_tx_stage_len > 0) {
     uplink_local_write_block(s_tx_stage, s_tx_stage_len);
@@ -342,30 +291,5 @@ void UplinkPoll(void) {
       }
     }
   }
-#else
-  // 1. Drain DSpico events (card transactions, each inside the game lock)
-  dspico_dcd_poll();
-
-  // 2. Run the TinyUSB device task. This may issue more card transactions
-  //    (edpt_open / edpt_xfer / stall) and invoke the CDC callbacks.
-  tud_task();
-
-  // 3. Sample + stream
-  if (s_sampling) {
-    uplink_sampler_tick();
-    if (uplink_sampler_block_full()) {
-      uint8_t stage[512];
-      uint32_t len = uplink_sampler_flush_block(stage);
-      if (len > 0) {
-        if (tud_cdc_connected() && tud_cdc_write(stage, len) == len) {
-          tud_cdc_write_flush();
-          uplink_frames_sent += len / UPLINK_FRAME_LEN;
-        } else {
-          uplink_frames_dropped += len / UPLINK_FRAME_LEN;
-        }
-      }
-    }
-  }
-#endif
 }
 
