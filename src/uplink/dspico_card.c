@@ -109,3 +109,38 @@ uint16_t dspico_card_lock_wait(void) {
     }
   }
 }
+
+// Persistent lock id for the uplink (see dspico_card.h): reserved once
+// at UplinkInit and never returned to the game's free list, so the id
+// can never be handed out to the game's own card transactions.
+static uint16_t s_reserved_lock_id = 0;
+static bool s_reserved_valid = false;
+
+bool dspico_card_lock_reserve(void) {
+  if (s_reserved_valid) {
+    return true;
+  }
+  int id = OS_GetLockID();
+  if (id < 0) {
+    return false;
+  }
+  s_reserved_lock_id = (uint16_t)id;
+  s_reserved_valid = true;
+  return true;
+}
+
+uint16_t dspico_card_lock_wait_persistent(void) {
+  if (s_reserved_valid) {
+    Card_LockRom(s_reserved_lock_id); // waits until the card is free
+    return s_reserved_lock_id;
+  }
+  return dspico_card_lock_wait();
+}
+
+void dspico_card_lock_release_persistent(uint16_t lock_id) {
+  if (s_reserved_valid && lock_id == s_reserved_lock_id) {
+    Card_UnlockRom(lock_id); // id stays reserved (not released to the game)
+    return;
+  }
+  dspico_card_lock_release(lock_id);
+}

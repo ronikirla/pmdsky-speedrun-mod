@@ -78,6 +78,101 @@
         beq Rand16BitIfAdvancesNotLocked // Custom function
         b Rand16Bit // Original function
 
+    // Crash dump: branch FatalError and OS_Panic into stubs that capture the
+    // registers and a stack snapshot, then write a 0x1000 record to the backup
+    // EEPROM (layout in src/crash_dump.h). The stubs live in the verified-free
+    // region at 0x02094968 (zero-filled in the original ROM, no xrefs) right
+    // after this code, and they emulate the original first instruction so the
+    // stack layout the original code expects is preserved. The @delay guard
+    // ensures the mod's overlay 36 code is initialized before calling into it.
+    .org 0x0200c2e4
+        b @CrashDumpFatalError
+    .org 0x0207bfb8
+        b @CrashDumpOS_Panic
+    .org 0x02094968
+    @CrashDumpFatalError:
+        // Original first instruction. r0 and r3 stay live in registers in the
+        // original code (mov r1, r0 / the next push {r3, lr}), so they are
+        // preserved across the dump call.
+        push {r0, r1, r2, r3}
+        push {r4, r5, r6, r7, r8, r9, r10, r11, r12}
+        // Wait until overlay 36 is loaded (r12 is saved on the stack by now).
+        ldr r12, [@delay]
+        cmp r12, 0
+        bne @crashFeGuardFail
+        sub sp, sp, #0x44 // 17-word register frame
+        str r0, [sp, #0x10] // Preserve original r0 (regs[4])
+        str r3, [sp, #0x1C] // Preserve original r3 (regs[7])
+        ldr r0, [@crashFePc]
+        mrs r1, cpsr
+        add r2, sp, #0x68 // sp_base
+        str r0, [sp, #0x00] // regs[0] = pc
+        str lr, [sp, #0x04] // regs[1] = lr
+        str r2, [sp, #0x08] // regs[2] = sp_base
+        str r1, [sp, #0x0C] // regs[3] = cpsr
+        ldr r0, [sp, #0x6C]
+        str r0, [sp, #0x14] // regs[5] = original r1
+        ldr r0, [sp, #0x70]
+        str r0, [sp, #0x18] // regs[6] = original r2
+        add r0, sp, #0x44
+        ldmia r0, {r4, r5, r6, r7, r8, r9, r10, r11, r12}
+        add r0, sp, #0x20
+        stmia r0, {r4, r5, r6, r7, r8, r9, r10, r11, r12} // regs[8..16]
+        mov r0, #1 // hook id: FatalError
+        mov r1, sp // register frame
+        bl CrashDumpWrite
+        add r0, sp, #0x44
+        ldmia r0, {r4, r5, r6, r7, r8, r9, r10, r11, r12}
+        ldr r0, [sp, #0x10] // Restore original r0
+        ldr r3, [sp, #0x1C] // Restore original r3
+        add sp, sp, #0x78
+        b 0x0200c2e8
+    @crashFeGuardFail:
+        add sp, sp, #0x34 // Unwind to exactly sp_base
+        b 0x0200c2e8
+    @crashFePc:
+        .word 0x0200c2e4
+    .org 0x020949f4
+    @CrashDumpOS_Panic:
+        // Original first instruction. r0-r2 are clobbered by the original
+        // code's first call, so they only need to be preserved for the dump.
+        push {r0, r1, r2, r4, r5, r6, r7, r8, r9, r10, r11, r12}
+        push {r3, lr}
+        // Wait until overlay 36 is loaded (r12 is saved on the stack by now).
+        ldr r12, [@delay]
+        cmp r12, 0
+        bne @crashOpGuardFail
+        sub sp, sp, #0x44 // 17-word register frame
+        ldr r0, [@crashOpPc]
+        mrs r1, cpsr
+        add r2, sp, #0x44 // sp_base
+        str r0, [sp, #0x00] // regs[0] = pc
+        str lr, [sp, #0x04] // regs[1] = lr
+        str r2, [sp, #0x08] // regs[2] = sp_base
+        str r1, [sp, #0x0C] // regs[3] = cpsr
+        add r3, sp, #0x4C
+        ldmia r3, {r0, r1, r2}
+        ldr r3, [sp, #0x48]
+        add r4, sp, #0x10
+        stmia r4, {r0, r1, r2, r3} // regs[4..7]
+        add r3, sp, #0x58
+        ldmia r3, {r4, r5, r6, r7, r8, r9, r10, r11, r12}
+        add r3, sp, #0x20
+        stmia r3, {r4, r5, r6, r7, r8, r9, r10, r11, r12} // regs[8..16]
+        mov r0, #2 // hook id: OS_Panic
+        mov r1, sp // register frame
+        add r2, sp, #0x44 // sp_base
+        bl CrashDumpWrite
+        add r3, sp, #0x4C
+        ldmia r3, {r0, r1, r2, r4, r5, r6, r7, r8, r9, r10, r11, r12}
+        add sp, sp, #0x7C
+        b 0x0207bfbc
+    @crashOpGuardFail:
+        add sp, sp, #0x38 // Unwind to exactly sp_base
+        b 0x0207bfbc
+    @crashOpPc:
+        .word 0x0207bfb8
+
     // Overworld HUD drawing
     .org 0x02008f44
         b CustomSetBrightnessExit

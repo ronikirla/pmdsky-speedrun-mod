@@ -157,3 +157,16 @@ void     dspico_card_lock_release(uint16_t lock_id);
 
 uint16_t dspico_card_lock_wait(void);
 
+// Persistent lock id for the uplink: reserved once (UplinkInit) and
+// never returned to the game's free list, so the id can never be
+// handed out to the game's own card transactions (saves, R4, ...),
+// which cycle ids per operation. Best effort: returns true when an
+// id could be reserved.
+bool dspico_card_lock_reserve(void);
+// Like dspico_card_lock_wait(), but uses the reserved id when one has
+// been reserved; falls back to per-transaction acquisition otherwise.
+uint16_t dspico_card_lock_wait_persistent(void);
+// dspico_card_lock_release() for the reserved id: unlocks the card but
+// keeps the id out of the game's free list.
+void dspico_card_lock_release_persistent(uint16_t lock_id);
+

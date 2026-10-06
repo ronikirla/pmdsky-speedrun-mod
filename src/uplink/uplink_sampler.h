@@ -35,11 +35,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define UPLINK_SAMPLE_COUNT   14
-#define UPLINK_FRAME_LEN      70
+#define UPLINK_SAMPLE_COUNT 14
+#define UPLINK_FRAME_LEN 70
+// changed to 1 in order to sample memory more frequently
 #define UPLINK_FRAMES_PER_BLOCK 1
 
-struct uplink_frame {
+struct uplink_frame
+{
   uint8_t magic[2];
   uint32_t seq;
   uint32_t game_frame;
@@ -51,7 +53,7 @@ struct uplink_frame {
 extern uint32_t uplink_frames_sent;
 extern uint32_t uplink_frames_dropped;
 extern uint32_t uplink_card_lock_skips;
-extern uint32_t uplink_card_lock_waits; // lock waits >= 2 ms (contention with game I/O)
+extern uint32_t uplink_card_lock_waits;    // lock waits >= 2 ms (contention with game I/O)
 extern uint32_t uplink_card_busy_timeouts; // wait_busy > 20 ms (DSpico firmware stuck)
 
 // Set up the default sample table and reset counters
@@ -62,7 +64,7 @@ void uplink_sampler_tick(void);
 
 // Copy the staged block into dst (up to UPLINK_FRAME_LEN * FRAMES_PER_BLOCK),
 // reset the staging area, and return the number of valid bytes
-uint32_t uplink_sampler_flush_block(uint8_t* dst);
+uint32_t uplink_sampler_flush_block(uint8_t *dst);
 
 // Discard the staged block (e.g. when the USB TX FIFO cannot accept it)
 void uplink_sampler_discard_block(void);

@@ -17,3 +17,5 @@ symbols/generated_*.ld
 PMD_EoS_Uplink_Reader/bin/
 PMD_EoS_Uplink_Reader/obj/
 PMD_EoS_Uplink_Reader/.vs/
+
+__pycache__/

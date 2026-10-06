@@ -1,0 +1,271 @@
+"""Report rendering: a human-readable text report and a JSON payload."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
+from . import cpsr as cpsr_mod
+from .backtrace import Frame, snapshot_rows
+from .dump import RECORD_SIZE, CrashDump, HOOK_FATAL_ERROR
+from .symtab import Resolution, SymbolTable
+
+VERSION_LABELS = {
+    "EU": "European (EU)",
+    "NA": "North American (NA/US)",
+    "JP": "Japanese (JP)",
+}
+
+# Short labels for the synthetic mod blocks (their full names are verbose).
+_BLOCK_SHORT_LABELS = {
+    "speedrun mod (overlay 36 common area)": "mod",
+    "overlay 36 (preserved original)": "overlay36",
+    "mod patches (arm9)": "mod-patches",
+    "mod symbols": "mod",
+}
+
+_MAX_MSG_DISPLAY = 300
+
+
+@dataclass
+class ReportContext:
+    source_path: str
+    source_offset: int
+    version: Optional[str]
+    version_source: str
+    symbols_dir: Optional[str]
+    warnings: List[str] = field(default_factory=list)
+    rom_path: Optional[str] = None
+
+
+def _addr(value: Optional[int]) -> str:
+    if value is None:
+        return "????????"
+    return "0x%08X" % (value & 0xFFFFFFFF)
+
+
+def _block_label(symbol) -> str:
+    return _BLOCK_SHORT_LABELS.get(symbol.block, symbol.block)
+
+
+def _format_candidate(res: Resolution) -> str:
+    sym = res.symbol
+    prefix = "" if res.exact else "~"
+    if res.offset:
+        body = "%s%s+0x%X" % (prefix, sym.name, res.offset)
+    else:
+        body = prefix + sym.name
+    return "%s [%s]" % (body, _block_label(sym))
+
+
+def describe_candidates(candidates: List[Resolution]) -> str:
+    if not candidates:
+        return "(no symbol match)"
+    return _format_candidate(candidates[0])
+
+
+def describe_address(table: Optional[SymbolTable], addr: int) -> str:
+    """Human-readable description of one address (candidates + region)."""
+    if table is not None:
+        candidates = table.resolve(addr, kind="function")
+        if not candidates:
+            # Fall back to exact data symbols only: a nearest-below guess
+            # from the catch-all ram.yml block would be noise for code
+            # addresses.
+            candidates = [r for r in table.resolve(addr) if r.exact]
+        if candidates:
+            text = _format_candidate(candidates[0])
+            extra = candidates[1:]
+            if extra:
+                shown = ", ".join(_format_candidate(c) for c in extra[:3])
+                ellipsis = ", ..." if len(extra) > 3 else ""
+                text += " (also: %s%s)" % (shown, ellipsis)
+            return text
+        region = table.region_label(addr)
+        if region:
+            return "(no symbol match; region: %s)" % _BLOCK_SHORT_LABELS.get(region, region)
+        return "(no symbol match)"
+    return "(symbols unavailable)"
+
+
+def _truncate(text: str, limit: int = _MAX_MSG_DISPLAY) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "...(truncated)"
+
+
+def render_text(dump: CrashDump, table: Optional[SymbolTable],
+                frames: List[Frame], trace_truncated: bool,
+                rom_info: Optional[Dict], ctx: ReportContext,
+                raw_stack_limit: Optional[int] = None) -> str:
+    lines: List[str] = []
+    push = lines.append
+    bar = "=" * 78
+
+    push(bar)
+    push(" Crash dump report - PMD Sky speedrun mod")
+    push(bar)
+    push("")
+    push("Record")
+    push("  source      %s @ %s (%s-byte crash dump record)"
+         % (ctx.source_path, hex(ctx.source_offset), hex(RECORD_SIZE)))
+    push("  crash type  %s (hook id %d)" % (dump.hook_name, dump.hook_id))
+    push("  game        %s - %s"
+         % (VERSION_LABELS.get(ctx.version, ctx.version), ctx.version_source))
+    if dump.msg:
+        push('  message     "%s"' % _truncate(dump.msg))
+    elif dump.is_fatal_error:
+        push('  message     (empty; the format-string pointer was not in the '
+             'cartridge region)')
+    else:
+        push("  message     (none; OS_Panic records no message)")
+
+    push("")
+    push("Crash site")
+    push("  pc    %s  %s" % (_addr(dump.pc), describe_address(table, dump.pc)))
+    lr_note = " (Thumb return address)" if dump.lr & 1 else ""
+    push("  lr    %s  %s%s" % (_addr(dump.lr), describe_address(table, dump.lr & ~1), lr_note))
+    push("  sp    %s  (stack snapshot base; %s bytes captured upward)"
+         % (_addr(dump.sp), hex(len(dump.stack))))
+    push("  cpsr  %s  %s" % (_addr(dump.cpsr), cpsr_mod.format_cpsr(dump.cpsr)))
+    push("  tick  %s  (raw OS_GetTickLo() value - a free-running OS timer, "
+         "not wall-clock time)" % _addr(dump.tick))
+
+    push("")
+    push("Registers")
+    arg_roles = ["arg0 (prog_pos pointer)", "arg1 (format string pointer)",
+                 "arg2 (variadic #1)", "arg3 (variadic #2)"] if dump.is_fatal_error else []
+    for i, value in enumerate(dump.regs):
+        annotation = ""
+        if i < 4:
+            if arg_roles:
+                annotation = "  = %s" % arg_roles[i]
+            else:
+                annotation = "  = arg%d (original r%d at hook entry)" % (i, i)
+        push("  r%-2d  %s%s" % (i, _addr(value), annotation))
+
+    push("")
+    push("Backtrace (best-effort; candidate return addresses from the stack snapshot)")
+    if frames:
+        for frame in frames:
+            if frame.origin == "stack":
+                location = "sp+0x%04X" % (frame.stack_offset or 0)
+            else:
+                location = frame.origin.ljust(9)
+            note = " (Thumb)" if frame.thumb else ""
+            push("  #%-2d %s %s  %s%s"
+                 % (frame.index, location.ljust(9), _addr(frame.address),
+                    describe_address(table, frame.address), note))
+        if trace_truncated:
+            push("  (frame cap reached; increase --max-frames to scan further)")
+    else:
+        push("  (no code addresses found)")
+
+    if rom_info is not None:
+        push("")
+        push("ROM-derived info (from %s)" % (ctx.rom_path or "ROM"))
+        if "assert_file" in rom_info:
+            push("  assert location   : %s:%d"
+                 % (rom_info["assert_file"], rom_info["assert_line"]))
+        if "formatted_message" in rom_info:
+            suffix = ""
+            unresolved = rom_info.get("unresolved_conversions", 0)
+            if unresolved:
+                suffix = "  (%d conversion(s) unresolved - only arg2/arg3 are captured)" % unresolved
+            push('  formatted message : "%s"%s'
+                 % (_truncate(rom_info["formatted_message"]), suffix))
+        for note in rom_info.get("notes", []):
+            push("  note              : %s" % note)
+
+    if raw_stack_limit is not None:
+        push("")
+        push("Stack snapshot (from sp=%s upward)" % _addr(dump.sp))
+        for row in snapshot_rows(dump, table, limit=raw_stack_limit or None):
+            parts = ["  sp+0x%04X %s" % (row["index"] * 4, _addr(row["raw"]))]
+            if row["spill"]:
+                parts.append("hook stub spill: %s" % row["spill"])
+            elif row["is_code"] or row["candidates"]:
+                description = describe_candidates(row["candidates"])
+                parts.append(("code: " if row["is_code"] else "data: ") + description)
+            push("  ".join(parts))
+
+    if ctx.warnings:
+        push("")
+        push("Warnings")
+        for warning in ctx.warnings:
+            push("  - %s" % warning)
+
+    push("")
+    return "\n".join(lines)
+
+
+def _candidate_json(res: Resolution) -> Dict:
+    return {
+        "name": res.symbol.name,
+        "address": res.symbol.address,
+        "offset": res.offset,
+        "exact": res.exact,
+        "kind": res.symbol.kind,
+        "block": res.symbol.block,
+        "file": res.symbol.file,
+    }
+
+
+def build_json(dump: CrashDump, table: Optional[SymbolTable],
+               frames: List[Frame], trace_truncated: bool,
+               rom_info: Optional[Dict], ctx: ReportContext) -> Dict:
+    def candidates_for(addr: int) -> List[Dict]:
+        if table is None:
+            return []
+        resolved = table.resolve(addr, kind="function")
+        if not resolved:
+            resolved = [r for r in table.resolve(addr) if r.exact]
+        return [_candidate_json(r) for r in resolved]
+
+    payload: Dict = {
+        "source": {
+            "path": ctx.source_path,
+            "record_offset": ctx.source_offset,
+            "record_size": RECORD_SIZE,
+        },
+        "record_version": dump.record_version,
+        "hook_id": dump.hook_id,
+        "hook": dump.hook_name,
+        "game_version": ctx.version,
+        "game_version_source": ctx.version_source,
+        "tick": dump.tick,
+        "checksum": {
+            "stored": dump.checksum_stored,
+            "computed": dump.checksum_computed,
+            "ok": dump.checksum_ok,
+        },
+        "pc": {"raw": dump.pc, "candidates": candidates_for(dump.pc)},
+        "lr": {"raw": dump.lr, "thumb": bool(dump.lr & 1),
+               "candidates": candidates_for(dump.lr & ~1)},
+        "sp": dump.sp,
+        "cpsr": cpsr_mod.decode(dump.cpsr),
+        "registers": {"r%d" % i: value for i, value in enumerate(dump.regs)},
+        "args": {"arg%d" % i: value for i, value in enumerate(dump.args)},
+        "message": {
+            "raw": dump.msg,
+            "length": dump.msg_len,
+        },
+        "backtrace": [
+            {
+                "index": frame.index,
+                "origin": frame.origin,
+                "raw": frame.raw,
+                "address": frame.address,
+                "thumb": frame.thumb,
+                "stack_offset": frame.stack_offset,
+                "stack_address": frame.stack_address,
+                "candidates": [_candidate_json(r) for r in frame.candidates],
+            }
+            for frame in frames
+        ],
+        "backtrace_truncated": trace_truncated,
+        "warnings": list(ctx.warnings),
+    }
+    if rom_info is not None:
+        payload["rom_info"] = rom_info
+    return payload
