@@ -1,6 +1,36 @@
 #include "dspico_card.h"
 #include "uplink_sampler.h"
 
+//--------------------------------------------------------------------+
+// Card-bus watchdog
+//
+// Every DSpico transaction here runs while the game's card lock is held, so
+// an unbounded wait on the card controller would freeze the game's own card
+// I/O (overlay loads, saves, EEPROM, ...) at whatever point of the game the
+// wedge happened to hit. All waits are therefore bounded by DSPICO_BUSY_SPINS
+// / DSPICO_LOCK_ID_SPINS; on timeout the in-flight transaction is
+// force-aborted (MCCNT1 ENABLE cleared), the bus is flagged dead and the
+// uplink stops issuing card transactions for the rest of the session
+// (UplinkPoll checks dspico_card_is_dead()). The game keeps running, just
+// without USB streaming.
+//--------------------------------------------------------------------+
+
+static bool s_card_dead = false;
+
+bool dspico_card_is_dead(void) {
+  return s_card_dead;
+}
+
+// Force the card controller out of the in-flight transaction so the game's
+// next card access starts from a clean controller state. The game's card
+// driver fully reprograms MCCNT0/MCCNT1 and the command registers for every
+// transaction of its own, so nothing else needs to be restored here.
+static void dspico_card_abort_xfer(void) {
+  REG_MCCNT1 &= ~(uint32_t)MCCNT1_ENABLE;
+  s_card_dead = true;
+  uplink_card_busy_timeouts++;
+}
+
 // card_romSetCmd from Gericom/libtwl: a single 64-bit bswap store over the
 // two command registers. On ARM9 GCC emits two 32-bit stores (MCCMD0 first,
 // then MCCMD1), matching the verified command write order.
@@ -20,8 +50,19 @@ bool dspico_card_is_busy(void) {
   return REG_MCCNT1 & MCCNT1_ENABLE;
 }
 
+// Bounded: a plain command transaction finishes within microseconds, so
+// DSPICO_BUSY_SPINS iterations (~0.3 s) without the busy bit clearing means
+// the DSpico firmware is wedged.
 void dspico_card_wait_busy(void) {
+  if (s_card_dead) {
+    return;
+  }
+  uint32_t spins = 0;
   while (dspico_card_is_busy()) {
+    if (++spins > DSPICO_BUSY_SPINS) {
+      dspico_card_abort_xfer();
+      return;
+    }
   }
 }
 
@@ -36,10 +77,21 @@ uint32_t dspico_card_get_data(void) {
 // card_romCpuReadUnaligned from Gericom/libtwl: drain the data phase until
 // the busy bit clears, storing at most `words` 32-bit words (byte-wise, so
 // no alignment requirement on dst).
+// Bounded: a legitimate 512-byte phase takes ~77 ms at 6.7 MHz (a few tens
+// of thousands of loop iterations), so DSPICO_BUSY_SPINS iterations without
+// the phase completing means the card is wedged.
 void dspico_card_cpu_read(void* dst, uint32_t words) {
+  if (s_card_dead) {
+    return;
+  }
   uint8_t* d = (uint8_t*)dst;
   uint8_t* target = d + (words << 2);
+  uint32_t spins = 0;
   do {
+    if (++spins > DSPICO_BUSY_SPINS) {
+      dspico_card_abort_xfer();
+      return;
+    }
     if (dspico_card_is_data_ready()) {
       uint32_t data = dspico_card_get_data();
       if (d < target) {
@@ -56,13 +108,22 @@ void dspico_card_cpu_read(void* dst, uint32_t words) {
 // the busy bit clears. Keeps the card controller's data FIFO supplied by
 // checking DATA_READY; once src is exhausted it clocks zero words so the
 // full LEN_512 phase always completes.
+// Bounded: see dspico_card_cpu_read.
 void dspico_card_cpu_write(const void* src, uint32_t words, uint32_t valid_bytes) {
+  if (s_card_dead) {
+    return;
+  }
   uint32_t data = 0;
   const uint8_t* s = (const uint8_t*)src;
   const uint8_t* data_end = s + valid_bytes;
   (void) words; // the phase length is fixed by start_xfer (LEN_512);
   // we simply keep clocking zero words until busy clears
+  uint32_t spins = 0;
   do {
+    if (++spins > DSPICO_BUSY_SPINS) {
+      dspico_card_abort_xfer();
+      return;
+    }
     if (dspico_card_is_data_ready()) {
       if (s < data_end) {
         if (data_end - s >= 4) {
@@ -100,14 +161,19 @@ void dspico_card_lock_release(uint16_t lock_id) {
   OS_ReleaseLockId(lock_id);
 }
 
+// Bounded: if the lock id pool is exhausted (one id is permanently reserved
+// for the uplink and the mod's own save code caches another), give up after
+// DSPICO_LOCK_ID_SPINS attempts instead of spinning forever. Returns
+// DSPICO_LOCK_ID_INVALID; the caller must skip the transaction.
 uint16_t dspico_card_lock_wait(void) {
-  for (;;) {
+  for (uint32_t i = 0; i < DSPICO_LOCK_ID_SPINS; i++) {
     int id = OS_GetLockID();
     if (id >= 0) {
       Card_LockRom((uint16_t)id); // waits until the card is free
       return (uint16_t)id;
     }
   }
+  return DSPICO_LOCK_ID_INVALID;
 }
 
 // Persistent lock id for the uplink (see dspico_card.h): reserved once
@@ -130,6 +196,9 @@ bool dspico_card_lock_reserve(void) {
 }
 
 uint16_t dspico_card_lock_wait_persistent(void) {
+  if (s_card_dead) {
+    return DSPICO_LOCK_ID_INVALID;
+  }
   if (s_reserved_valid) {
     Card_LockRom(s_reserved_lock_id); // waits until the card is free
     return s_reserved_lock_id;
@@ -138,6 +207,9 @@ uint16_t dspico_card_lock_wait_persistent(void) {
 }
 
 void dspico_card_lock_release_persistent(uint16_t lock_id) {
+  if (lock_id == DSPICO_LOCK_ID_INVALID) {
+    return; // nothing was acquired
+  }
   if (s_reserved_valid && lock_id == s_reserved_lock_id) {
     Card_UnlockRom(lock_id); // id stays reserved (not released to the game)
     return;

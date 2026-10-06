@@ -61,6 +61,11 @@
 #define DSPICO_BUSY_SPINS      2000000  // ~0.3 s worst case at 67 MHz, tune
 #define OS_MODE_IRQ            0x12
 
+// Failure sentinel of the lock helpers. OS lock ids are small non-negative
+// indices, so this can never collide with a real id. Callers must skip the
+// transaction instead of running it without the card lock held.
+#define DSPICO_LOCK_ID_INVALID 0xFFFFu
+
 //--------------------------------------------------------------------+
 // DSpico USB protocol (DSpicoUsb.h from the LNH-team examples)
 //--------------------------------------------------------------------+
@@ -147,6 +152,16 @@ void   dspico_card_cpu_read(void* dst, uint32_t words);
 void   dspico_card_cpu_write(const void* src, uint32_t words, uint32_t valid_bytes);
 
 //--------------------------------------------------------------------+
+// Card-bus watchdog
+//--------------------------------------------------------------------+
+
+// True once a card transaction exceeded DSPICO_BUSY_SPINS and was
+// force-aborted (MCCNT1 ENABLE cleared). The uplink must stop issuing card
+// transactions for the rest of the session; the game keeps running without
+// USB streaming.
+bool dspico_card_is_dead(void);
+
+//--------------------------------------------------------------------+
 // Locked wrappers (safe to call from the uplink thread)
 //--------------------------------------------------------------------+
 
@@ -155,6 +170,9 @@ void   dspico_card_cpu_write(const void* src, uint32_t words, uint32_t valid_byt
 //uint16_t dspico_card_lock_acquire(void);
 void     dspico_card_lock_release(uint16_t lock_id);
 
+// Waits for a free lock id (bounded by DSPICO_LOCK_ID_SPINS attempts).
+// Returns the lock id, or DSPICO_LOCK_ID_INVALID if none became free
+// (caller must skip the operation).
 uint16_t dspico_card_lock_wait(void);
 
 // Persistent lock id for the uplink: reserved once (UplinkInit) and
@@ -165,6 +183,8 @@ uint16_t dspico_card_lock_wait(void);
 bool dspico_card_lock_reserve(void);
 // Like dspico_card_lock_wait(), but uses the reserved id when one has
 // been reserved; falls back to per-transaction acquisition otherwise.
+// Returns DSPICO_LOCK_ID_INVALID when the bus is dead or no lock id could
+// be acquired (caller must skip the operation).
 uint16_t dspico_card_lock_wait_persistent(void);
 // dspico_card_lock_release() for the reserved id: unlocks the card but
 // keeps the id out of the game's free list.

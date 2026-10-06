@@ -48,35 +48,58 @@ static uint32_t uplink_local_le32(uint8_t const *p)
   return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-// Locked single card transaction, no data phase
-static void uplink_local_send_cmd(uint64_t command)
+// Locked single card transaction, no data phase.
+// Returns false when the transaction was skipped (card lock unavailable or
+// card bus dead) so callers can retry later instead of running unlocked.
+static bool uplink_local_send_cmd(uint64_t command)
 {
   uint16_t lock = dspico_card_lock_wait_persistent();
+  if (lock == DSPICO_LOCK_ID_INVALID)
+  {
+    uplink_card_lock_skips++;
+    return false;
+  }
   dspico_card_set_cmd(command);
   dspico_card_start_xfer(DSPICO_USB_DEFAULT_COMMAND_SETTINGS, false);
   dspico_card_wait_busy();
   dspico_card_lock_release_persistent(lock);
+  return true;
 }
 
 // Ship up to 512 valid bytes to the firmware CDC TX ring (the rest of the
 // 512-byte phase is zero-padded by dspico_card_cpu_write).
-static void uplink_local_write_block(const uint8_t *src, uint32_t valid)
+// Returns false when the transaction was skipped (card lock unavailable or
+// card bus dead); the payload is then NOT shipped.
+static bool uplink_local_write_block(const uint8_t *src, uint32_t valid)
 {
   if (valid > 512)
   {
     valid = 512;
   }
   uint16_t lock = dspico_card_lock_wait_persistent();
+  if (lock == DSPICO_LOCK_ID_INVALID)
+  {
+    uplink_card_lock_skips++;
+    return false;
+  }
   dspico_card_set_cmd(DSPICO_CMD_USB_WRITE_DATA(0, UPLINK_LOCAL_TX_EP, 1, valid));
   dspico_card_start_xfer(DSPICO_USB_WRITE_DATA_SETTINGS, false);
   dspico_card_cpu_write(src, 512 / 4, valid);
   dspico_card_lock_release_persistent(lock);
+  return true;
 }
 
-// Read a 512-byte block (status or host RX) from the firmware
+// Read a 512-byte block (status or host RX) from the firmware.
+// Returns 0 when the transaction was skipped (card lock unavailable or card
+// bus dead); the contents of dst are then undefined.
 static uint32_t uplink_local_read_block(uint8_t *dst, uint32_t endpoint)
 {
   uint16_t lock = dspico_card_lock_wait_persistent();
+  if (lock == DSPICO_LOCK_ID_INVALID)
+  {
+    uplink_card_lock_skips++;
+    return 0;
+  }
   dspico_card_set_cmd(DSPICO_CMD_USB_READ_DATA(0, endpoint));
   dspico_card_start_xfer(DSPICO_USB_READ_DATA_SETTINGS, false);
   dspico_card_cpu_read(dst, 512 / 4);
@@ -287,7 +310,13 @@ void UplinkInit(void)
   // stack (usb_cdc_bridge.c) initializes the RP2040 SIE and pulls up D+.
   // The NDS keeps no USB state; UplinkPoll() ships sample blocks and polls
   // the firmware status block.
-  uplink_local_send_cmd(DSPICO_CMD_USB_COMMAND_LOCAL_STACK);
+  // If the card lock cannot be acquired right now (id pool momentarily
+  // exhausted) the command is skipped and retried on a later frame:
+  // MainRoutine calls UplinkInit every iteration until s_inited is set.
+  if (!uplink_local_send_cmd(DSPICO_CMD_USB_COMMAND_LOCAL_STACK))
+  {
+    return;
+  }
 
   s_sampling = true; // auto-start; host can pause with 0x02
   s_inited = true;
@@ -295,16 +324,21 @@ void UplinkInit(void)
 
 void UplinkPoll(void)
 {
-  if (!s_inited)
+  // Once the card bus wedged and was force-aborted, never touch it again:
+  // the game keeps running, just without USB streaming.
+  if (!s_inited || dspico_card_is_dead())
   {
     return;
   }
 
-  // 1. Flush staged host replies (PING)
+  // 1. Flush staged host replies (PING); retry on the next poll if the
+  //    card lock is momentarily unavailable
   if (s_tx_stage_len > 0)
   {
-    uplink_local_write_block(s_tx_stage, s_tx_stage_len);
-    s_tx_stage_len = 0;
+    if (uplink_local_write_block(s_tx_stage, s_tx_stage_len))
+    {
+      s_tx_stage_len = 0;
+    }
   }
 
   // 2. Sample + stream: one 512-byte card transaction per full block
@@ -319,8 +353,14 @@ void UplinkPoll(void)
       uint32_t len = uplink_sampler_flush_block(stage);
       if (len > 0)
       {
-        uplink_local_write_block(stage, len);
-        uplink_frames_sent += len / UPLINK_FRAME_LEN;
+        if (uplink_local_write_block(stage, len))
+        {
+          uplink_frames_sent += len / UPLINK_FRAME_LEN;
+        }
+        else
+        {
+          uplink_frames_dropped += len / UPLINK_FRAME_LEN;
+        }
       }
     }
   }

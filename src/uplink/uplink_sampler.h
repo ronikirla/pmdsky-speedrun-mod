@@ -54,7 +54,7 @@ extern uint32_t uplink_frames_sent;
 extern uint32_t uplink_frames_dropped;
 extern uint32_t uplink_card_lock_skips;
 extern uint32_t uplink_card_lock_waits;    // lock waits >= 2 ms (contention with game I/O)
-extern uint32_t uplink_card_busy_timeouts; // wait_busy > 20 ms (DSpico firmware stuck)
+extern uint32_t uplink_card_busy_timeouts; // a card transaction exceeded DSPICO_BUSY_SPINS (DSpico firmware stuck)
 
 // Set up the default sample table and reset counters
 void uplink_sampler_init(void);
