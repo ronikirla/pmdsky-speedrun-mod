@@ -1,8 +1,9 @@
-"""Best-effort backtrace reconstruction from the crash dump's stack snapshot.
+"""Best-effort backtrace reconstruction from a thread's stack snapshot.
 
-The snapshot starts at ``sp`` (``sp_base`` in ``src/crash_dump.h``) and runs
-upward for 0xE00 bytes.  Its first few words are the hook stub's own register
-spills (see ``patches/patch.asm``), not the crashed caller's stack frame:
+Each thread record carries its own snapshot, starting at the thread's ``sp``
+and running upward.  For the *current* thread (record 0, the crash/trigger
+site) the first words may belong to the hook stub's register spills (see
+``patches/patch.asm``) rather than to the crashed caller's stack frame:
 
 - FatalError stub: ``sp_base`` lands on the stub's ``push {r0-r3}``, so words
   0-3 hold the original r0-r3 and the caller's stack starts at word 4
@@ -10,6 +11,7 @@ spills (see ``patches/patch.asm``), not the crashed caller's stack frame:
 - OS_Panic stub: ``sp_base`` lands on the stub's ``push {r3, lr}``; the stub
   spills r3, lr, r0, r1, r2 and r4-r12 (14 words total) before the caller's
   stack begins.
+- Manual trigger: no stub, the snapshot starts at the trigger's own frame.
 
 Every later word whose value points into an executable region is emitted as
 a candidate return address (a potential caller frame).  This is necessarily
@@ -23,14 +25,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from .dump import CrashDump, HOOK_FATAL_ERROR, HOOK_OS_PANIC
+from .dump import (
+    CrashDump,
+    HOOK_FATAL_ERROR,
+    HOOK_MANUAL,
+    HOOK_OS_PANIC,
+    ThreadRecord,
+)
 from .symtab import Resolution, SymbolTable, default_code_filter
 
-# Words at the start of the stack snapshot that belong to the hook stub's
-# register spills rather than to the crashed caller's stack frame.
+# Words at the start of the current thread's snapshot that belong to the hook
+# stub's register spills rather than to the crashed caller's stack frame.
 SNAPSHOT_SKIP_WORDS = {
     HOOK_FATAL_ERROR: 4,
     HOOK_OS_PANIC: 14,
+    HOOK_MANUAL: 0,
 }
 
 # Which register each skipped word holds (for annotated stack dumps).
@@ -38,6 +47,7 @@ SPILL_REGISTER_LABELS = {
     HOOK_FATAL_ERROR: ["r0", "r1", "r2", "r3"],
     HOOK_OS_PANIC: ["r3", "lr", "r0", "r1", "r2",
                     "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12"],
+    HOOK_MANUAL: [],
 }
 
 
@@ -55,14 +65,12 @@ class Frame:
     candidates: List[Resolution] = field(default_factory=list)
 
 
-def build_backtrace(dump: CrashDump, table: Optional[SymbolTable],
-                    max_frames: int = 32) -> Tuple[List[Frame], bool]:
-    """Reconstruct the backtrace.
+def _scan_frames(pc: int, lr: int, sp_base: int, words: List[int], skip: int,
+                 table: Optional[SymbolTable], max_frames: int) -> Tuple[List[Frame], bool]:
+    """Build frames for one thread: pc, lr, then candidate return addresses.
 
-    Frame #0 is the crash site (``pc`` = the hooked FatalError/OS_Panic),
-    frame #1 is its caller (``lr``), and further frames are candidate return
-    addresses scanned from the stack snapshot.  Returns ``(frames,
-    truncated)``.
+    ``skip`` words at the start of the snapshot are ignored (the hook stub's
+    own register spills for the current thread, 0 for everything else).
     """
     code_filter = table.is_code_address if table is not None else default_code_filter
 
@@ -85,16 +93,14 @@ def build_backtrace(dump: CrashDump, table: Optional[SymbolTable],
             address=address,
             thumb=bool(raw & 1),
             stack_offset=stack_offset,
-            stack_address=(dump.sp + stack_offset) if (stack_offset is not None and dump.sp) else None,
+            stack_address=(sp_base + stack_offset) if (stack_offset is not None and sp_base) else None,
             candidates=candidates,
         ))
 
-    add(dump.pc, "pc")
-    add(dump.lr, "lr")
+    add(pc, "pc")
+    add(lr, "lr")
 
     seen = {f.address for f in frames}
-    words = dump.stack_words()
-    skip = SNAPSHOT_SKIP_WORDS.get(dump.hook_id, 4)
     truncated = False
     for i in range(skip, len(words)):
         if len(frames) >= max_frames:
@@ -120,6 +126,39 @@ def build_backtrace(dump: CrashDump, table: Optional[SymbolTable],
     return frames, truncated
 
 
+def build_backtrace(dump: CrashDump, table: Optional[SymbolTable],
+                    max_frames: int = 32) -> Tuple[List[Frame], bool]:
+    """Reconstruct the current thread's backtrace (the crash/trigger site).
+
+    Frame #0 is the crash site (``pc`` = the hooked FatalError/OS_Panic, or
+    the manual trigger), frame #1 is its caller (``lr``), and further frames
+    are candidate return addresses scanned from that thread's snapshot.
+    Returns ``(frames, truncated)``.
+    """
+    words = dump.stack_words()
+    skip = SNAPSHOT_SKIP_WORDS.get(dump.hook_id, 0)
+    return _scan_frames(dump.pc, dump.lr, dump.sp, words, skip, table, max_frames)
+
+
+def build_thread_backtrace(record: ThreadRecord, table: Optional[SymbolTable],
+                           max_frames: int = 32,
+                           hook_id: Optional[int] = None) -> Tuple[List[Frame], bool]:
+    """Reconstruct one thread's backtrace from its record.
+
+    Frame #0 is the thread's saved pc (the point it was switched out at, or
+    its entry point when it never ran) and frame #1 its saved lr; the rest
+    are candidate return addresses from the snapshot.  For the current
+    thread's record (``hook_id`` given) the first ``skip`` words are the hook
+    stub's register spills and are ignored, matching :func:`build_backtrace`.
+    Returns ``(frames, truncated)``.
+    """
+    skip = 0
+    if record.is_current and hook_id is not None:
+        skip = SNAPSHOT_SKIP_WORDS.get(hook_id, 0)
+    return _scan_frames(record.pc, record.lr, record.sp, record.stack_words(),
+                        skip, table, max_frames)
+
+
 def snapshot_rows(dump: CrashDump, table: Optional[SymbolTable],
                   limit: Optional[int] = None) -> List[dict]:
     """Annotated rows for ``--raw-stack``.
@@ -131,7 +170,7 @@ def snapshot_rows(dump: CrashDump, table: Optional[SymbolTable],
     a nearest-below guess.
     """
     words = dump.stack_words()
-    skip = SNAPSHOT_SKIP_WORDS.get(dump.hook_id, 4)
+    skip = SNAPSHOT_SKIP_WORDS.get(dump.hook_id, 0)
     spill = SPILL_REGISTER_LABELS.get(dump.hook_id, [])
     rows: List[dict] = []
     for i, raw in enumerate(words):

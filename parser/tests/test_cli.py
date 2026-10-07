@@ -9,11 +9,12 @@ import unittest
 from pathlib import Path
 
 try:
-    from .helpers import make_record, make_save
+    from .helpers import make_record, make_save, make_thread_record
 except ImportError:  # running the file directly
-    from helpers import make_record, make_save  # type: ignore
+    from helpers import make_record, make_save, make_thread_record  # type: ignore
 
 from parser import cli
+from parser import dump as dump_mod
 
 
 class CliTests(unittest.TestCase):
@@ -83,6 +84,40 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Stack snapshot", out)
         self.assertIn("hook stub spill: r0", out)
+
+    def test_thread_sections(self):
+        current = make_thread_record(
+            flags=dump_mod.THREAD_FLAG_SP_VALID | dump_mod.THREAD_FLAG_CURRENT)
+        other = make_thread_record(thread_id=3, priority=30, state=1)
+        path = self._write(make_save(make_record(threads=[current, other], msg=b"")))
+        code, out, _ = self._run([path])
+        self.assertEqual(code, 0)
+        self.assertIn("Other threads (1", out)
+        self.assertIn("id 3", out)
+        self.assertIn("priority 30", out)
+        self.assertIn("ready", out)
+
+    def test_manual_trigger_report(self):
+        path = self._write(make_save(make_record(hook_id=dump_mod.HOOK_MANUAL,
+                                                 msg=b"", trigger_buttons=0x0F00)))
+        code, out, _ = self._run([path])
+        self.assertEqual(code, 0)
+        self.assertIn("Manual trigger (L+R+X+Y)", out)
+        self.assertIn("R L X Y", out)
+
+    def test_json_threads(self):
+        current = make_thread_record(
+            flags=dump_mod.THREAD_FLAG_SP_VALID | dump_mod.THREAD_FLAG_CURRENT)
+        other = make_thread_record(thread_id=3, priority=30, state=1)
+        path = self._write(make_save(make_record(threads=[current, other], msg=b"")))
+        code, out, _ = self._run([path, "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(len(payload["threads"]), 2)
+        self.assertTrue(payload["threads"][0]["is_current"])
+        self.assertEqual(payload["threads"][1]["thread_id"], 3)
+        self.assertEqual(payload["threads"][1]["state_name"], "ready")
+        self.assertTrue(payload["complete"])
 
     def test_offset_override(self):
         record = make_record()

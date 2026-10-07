@@ -12,23 +12,33 @@
 #include "eeprom.h"
 #include "soft_reset.h"
 #include "uplink.h"
+#include "crash_dump.h"
 
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_2KB 1024 * 2
+#define STACK_SIZE_1KB 1024
 
+// Lower number = higher priority. The watchdog must preempt a hung game
+// thread, so it runs above the other mod threads (10 and 30).
+#define WATCHDOG_THREAD_PRIO 5
 #define VBLANK_ROUTINE_THREAD_PRIO 10
 #define MAIN_ROUTINE_THREAD_PRIO 30
 
 void VCount0Routine(void*);
 void MainRoutine(void*);
 
+struct thread watchdog_thread;
 struct thread vblank_routine_thread;
 struct thread main_routine_thread;
 
+uint64_t watchdog_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
 uint64_t vblank_routine_thread_stack[STACK_SIZE_2KB / sizeof(uint64_t)];
 uint64_t main_routine_thread_stack[STACK_SIZE_4KB / sizeof(uint64_t)];
 
 __attribute__((used)) void InitThreads(void) {
+  OS_CreateThread(&watchdog_thread, CrashDumpWatchdogRoutine, NULL,
+                  watchdog_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
+                  STACK_SIZE_1KB, WATCHDOG_THREAD_PRIO);
   OS_CreateThread(&vblank_routine_thread, VCount0Routine, NULL,
                   vblank_routine_thread_stack + STACK_SIZE_2KB / sizeof(uint64_t),
                   STACK_SIZE_2KB, VBLANK_ROUTINE_THREAD_PRIO);
@@ -40,6 +50,7 @@ __attribute__((used)) void InitThreads(void) {
 }
 
 __attribute__((used)) void WakeupThreads(void) {
+  OS_WakeupThreadDirect(&watchdog_thread);
   OS_WakeupThreadDirect(&vblank_routine_thread);
   OS_WakeupThreadDirect(&main_routine_thread);
 }

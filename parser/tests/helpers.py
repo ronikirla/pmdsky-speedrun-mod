@@ -16,6 +16,37 @@ import struct  # noqa: E402
 from parser import dump as dump_mod  # noqa: E402
 
 
+def make_thread_record(thread_id: int = 1,
+                       priority: int = 30,
+                       pc: int = 0x200C2E4,
+                       lr: int = 0x20492B4,
+                       sp: int = 0x23EF0000,
+                       stack_start: int = 0x23EF0000,
+                       stack_end: int = 0x23EF0800,
+                       state: int = 0,
+                       flags: int = None,
+                       snapshot_words=None,
+                       snapshot_bytes: int = None,
+                       snapshot_bytes_field: int = None,
+                       magic: int = dump_mod.THREAD_MAGIC) -> bytes:
+    """Build one packed thread record ('THRD' header + stack snapshot).
+
+    ``snapshot_bytes_field`` overrides the length stored in the record header
+    (for truncation tests) while the actual payload keeps its real size.
+    """
+    if snapshot_words is None:
+        snapshot_words = [0] * 8
+    snap = b"".join(struct.pack("<I", word & 0xFFFFFFFF) for word in snapshot_words)
+    if snapshot_bytes is not None:
+        snap = snap[:snapshot_bytes].ljust(snapshot_bytes, b"\x00")
+    if flags is None:
+        flags = dump_mod.THREAD_FLAG_SP_VALID
+    stored = len(snap) if snapshot_bytes_field is None else snapshot_bytes_field
+    header = struct.pack("<11I", magic, thread_id, priority, pc, lr, sp,
+                         stack_start, stack_end, state, stored, flags)
+    return header + snap
+
+
 def make_record(hook_id: int = dump_mod.HOOK_FATAL_ERROR,
                 pc: int = 0x200C2E4,
                 lr: int = 0x20492B4,
@@ -29,8 +60,21 @@ def make_record(hook_id: int = dump_mod.HOOK_FATAL_ERROR,
                 magic: int = dump_mod.MAGIC,
                 version: int = dump_mod.RECORD_VERSION,
                 msg_len: int = None,
-                checksum: int = None) -> bytes:
-    """Build a synthetic 0x1000-byte crash dump record."""
+                checksum: int = None,
+                threads=None,
+                thread_count: int = None,
+                threads_written: int = None,
+                crashing_index: int = 0,
+                trigger_buttons: int = 0,
+                complete: bool = True,
+                stack_start: int = 0x23EF0000,
+                stack_end: int = 0x23EF0800) -> bytes:
+    """Build a synthetic 0x1000-byte crash dump record (format version 3).
+
+    ``threads`` is a list of raw thread record bytes (see make_thread_record);
+    by default one record is generated for the current thread, using
+    ``stack_words`` as its snapshot.
+    """
     header = bytearray(dump_mod.HEADER_SIZE)
 
     def put(offset: int, value: int) -> None:
@@ -55,16 +99,34 @@ def make_record(hook_id: int = dump_mod.HOOK_FATAL_ERROR,
     if msg is not None:
         put(dump_mod.OFF_MSG_LEN, msg_len if msg_len is not None else len(msg))
         header[dump_mod.OFF_MSG:dump_mod.OFF_MSG + len(msg)] = msg
+
+    if threads is None:
+        threads = [make_thread_record(
+            pc=pc, lr=lr, sp=sp, stack_start=stack_start, stack_end=stack_end,
+            flags=dump_mod.THREAD_FLAG_SP_VALID | dump_mod.THREAD_FLAG_CURRENT,
+            snapshot_words=stack_words if stack_words is not None else [0] * 8,
+        )]
+    body = b"".join(threads)
+    if thread_count is None:
+        thread_count = len(threads)
+    if threads_written is None:
+        threads_written = len(threads)
+    put(dump_mod.OFF_THREAD_COUNT, thread_count)
+    put(dump_mod.OFF_THREADS_WRITTEN, threads_written)
+    put(dump_mod.OFF_CRASHING_INDEX, crashing_index)
+    put(dump_mod.OFF_TRIGGER_BUTTONS, trigger_buttons)
+    put(dump_mod.OFF_COMPLETE, 1 if complete else 0)
+
     if checksum is None:
         checksum = dump_mod.compute_checksum(bytes(header))
     put(dump_mod.OFF_CHECKSUM, checksum)
 
-    stack = bytearray(dump_mod.STACK_SIZE)
-    if stack_words:
-        for i, word in enumerate(stack_words):
-            if 4 * i + 4 <= dump_mod.STACK_SIZE:
-                struct.pack_into("<I", stack, 4 * i, word & 0xFFFFFFFF)
-    return bytes(header) + bytes(stack)
+    record = bytes(header) + body
+    if len(record) < dump_mod.RECORD_SIZE:
+        record += bytes(dump_mod.RECORD_SIZE - len(record))
+    else:
+        record = record[:dump_mod.RECORD_SIZE]
+    return record
 
 
 def make_save(record: bytes, offset: int = dump_mod.EEPROM_BASE,

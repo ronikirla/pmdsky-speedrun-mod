@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from . import cpsr as cpsr_mod
 from .backtrace import Frame, snapshot_rows
-from .dump import RECORD_SIZE, CrashDump, HOOK_FATAL_ERROR
+from .dump import (
+    RECORD_SIZE,
+    CrashDump,
+    HOOK_FATAL_ERROR,
+    HOOK_OS_PANIC,
+    ThreadRecord,
+    decode_buttons,
+)
 from .symtab import Resolution, SymbolTable
 
 VERSION_LABELS = {
@@ -94,9 +101,38 @@ def _truncate(text: str, limit: int = _MAX_MSG_DISPLAY) -> str:
     return text[:limit] + "...(truncated)"
 
 
+def _frame_lines(table: Optional[SymbolTable], frames: List[Frame],
+                 indent: str = "  ") -> List[str]:
+    lines: List[str] = []
+    for frame in frames:
+        if frame.origin == "stack":
+            location = "sp+0x%04X" % (frame.stack_offset or 0)
+        else:
+            location = frame.origin.ljust(9)
+        note = " (Thumb)" if frame.thumb else ""
+        lines.append("%s#%-2d %s %s  %s%s"
+                     % (indent, frame.index, location.ljust(9), _addr(frame.address),
+                        describe_address(table, frame.address), note))
+    return lines
+
+
+def describe_thread_line(table: Optional[SymbolTable], record: ThreadRecord) -> str:
+    """One-line summary of a thread record (id, priority, state, pc)."""
+    if record.known:
+        head = "#%-2d id %-3d priority %-3d %-11s" % (
+            record.index, record.thread_id, record.priority, record.state_name)
+    else:
+        head = "#%-2d id ?   priority ?   %-11s" % (record.index, record.state_name)
+    if record.is_current:
+        head += " [current]"
+    return "%s pc %s  %s" % (head, _addr(record.pc),
+                             describe_address(table, record.pc & ~1))
+
+
 def render_text(dump: CrashDump, table: Optional[SymbolTable],
                 frames: List[Frame], trace_truncated: bool,
                 rom_info: Optional[Dict], ctx: ReportContext,
+                thread_traces: Optional[List[Tuple[ThreadRecord, List[Frame], bool]]] = None,
                 raw_stack_limit: Optional[int] = None) -> str:
     lines: List[str] = []
     push = lines.append
@@ -117,8 +153,17 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
     elif dump.is_fatal_error:
         push('  message     (empty; the format-string pointer was not in the '
              'cartridge region)')
+    elif dump.is_manual:
+        push('  message     (none; manual triggers record no message)')
     else:
-        push("  message     (none; OS_Panic records no message)")
+        push('  message     (none; OS_Panic records no message)')
+    if dump.is_manual:
+        held = decode_buttons(dump.trigger_buttons)
+        push("  trigger     buttons held: %s (raw %s)"
+             % (" ".join(held) if held else "(none)", hex(dump.trigger_buttons)))
+    push("  threads     %d in the game's list, %d records written%s"
+         % (dump.thread_count, dump.threads_written,
+            "" if dump.complete else "  [dump incomplete]"))
 
     push("")
     push("Crash site")
@@ -147,19 +192,35 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
     push("")
     push("Backtrace (best-effort; candidate return addresses from the stack snapshot)")
     if frames:
-        for frame in frames:
-            if frame.origin == "stack":
-                location = "sp+0x%04X" % (frame.stack_offset or 0)
-            else:
-                location = frame.origin.ljust(9)
-            note = " (Thumb)" if frame.thumb else ""
-            push("  #%-2d %s %s  %s%s"
-                 % (frame.index, location.ljust(9), _addr(frame.address),
-                    describe_address(table, frame.address), note))
+        for line in _frame_lines(table, frames):
+            push(line)
         if trace_truncated:
             push("  (frame cap reached; increase --max-frames to scan further)")
     else:
         push("  (no code addresses found)")
+
+    others = [(rec, tf, tt) for rec, tf, tt in (thread_traces or [])
+              if rec.index != dump.crashing_index]
+    if others:
+        push("")
+        push("Other threads (%d; record %d above is the current thread)"
+             % (len(others), dump.crashing_index))
+        for record, thread_frames, thread_truncated in others:
+            push("")
+            push("  %s" % describe_thread_line(table, record))
+            push("    lr %s  %s" % (_addr(record.lr),
+                                    describe_address(table, record.lr & ~1)))
+            push("    sp %s  stack %s..%s, snapshot %s bytes%s"
+                 % (_addr(record.sp), _addr(record.stack_start), _addr(record.stack_end),
+                    hex(record.snapshot_bytes),
+                    "" if record.sp_valid else "  [sp outside the stack bounds]"))
+            if thread_frames:
+                for line in _frame_lines(table, thread_frames, indent="    "):
+                    push(line)
+                if thread_truncated:
+                    push("    (frame cap reached; increase --max-frames to scan further)")
+            else:
+                push("    (no code addresses found)")
 
     if rom_info is not None:
         push("")
@@ -213,7 +274,9 @@ def _candidate_json(res: Resolution) -> Dict:
 
 def build_json(dump: CrashDump, table: Optional[SymbolTable],
                frames: List[Frame], trace_truncated: bool,
-               rom_info: Optional[Dict], ctx: ReportContext) -> Dict:
+               rom_info: Optional[Dict], ctx: ReportContext,
+               thread_traces: Optional[List[Tuple[ThreadRecord, List[Frame], bool]]] = None,
+               ) -> Dict:
     def candidates_for(addr: int) -> List[Dict]:
         if table is None:
             return []
@@ -250,6 +313,14 @@ def build_json(dump: CrashDump, table: Optional[SymbolTable],
             "raw": dump.msg,
             "length": dump.msg_len,
         },
+        "thread_count": dump.thread_count,
+        "threads_written": dump.threads_written,
+        "crashing_index": dump.crashing_index,
+        "trigger_buttons": {
+            "raw": dump.trigger_buttons,
+            "held": decode_buttons(dump.trigger_buttons),
+        },
+        "complete": dump.complete,
         "backtrace": [
             {
                 "index": frame.index,
@@ -264,6 +335,40 @@ def build_json(dump: CrashDump, table: Optional[SymbolTable],
             for frame in frames
         ],
         "backtrace_truncated": trace_truncated,
+        "threads": [
+            {
+                "index": record.index,
+                "record_offset": record.record_offset,
+                "thread_id": record.thread_id if record.known else None,
+                "priority": record.priority if record.known else None,
+                "state": record.state,
+                "state_name": record.state_name,
+                "pc": {"raw": record.pc, "candidates": candidates_for(record.pc & ~1)},
+                "lr": {"raw": record.lr, "thumb": bool(record.lr & 1),
+                       "candidates": candidates_for(record.lr & ~1)},
+                "sp": record.sp,
+                "stack_start": record.stack_start,
+                "stack_end": record.stack_end,
+                "snapshot_bytes": record.snapshot_bytes,
+                "is_current": record.is_current,
+                "sp_valid": record.sp_valid,
+                "backtrace": [
+                    {
+                        "index": frame.index,
+                        "origin": frame.origin,
+                        "raw": frame.raw,
+                        "address": frame.address,
+                        "thumb": frame.thumb,
+                        "stack_offset": frame.stack_offset,
+                        "stack_address": frame.stack_address,
+                        "candidates": [_candidate_json(r) for r in frame.candidates],
+                    }
+                    for frame in thread_frames
+                ],
+                "backtrace_truncated": thread_truncated,
+            }
+            for record, thread_frames, thread_truncated in (thread_traces or [])
+        ],
         "warnings": list(ctx.warnings),
     }
     if rom_info is not None:

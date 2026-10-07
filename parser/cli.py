@@ -62,9 +62,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--raw-stack", nargs="?", type=_int_arg, const=-1, default=0, metavar="WORDS",
-        help="also print an annotated stack snapshot; give WORDS to cap the number "
-             "of words shown (bare --raw-stack prints all %d words)"
-             % dump_mod.STACK_WORD_COUNT,
+        help="also print an annotated stack snapshot of the current thread; give "
+             "WORDS to cap the number of words shown (bare --raw-stack prints the "
+             "whole snapshot)",
     )
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     return parser
@@ -164,6 +164,16 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # --- backtrace + ROM dereferencing ---------------------------------------
     frames, truncated = backtrace_mod.build_backtrace(dump, table, max_frames=args.max_frames)
+    # Per-thread traces: the current thread's uses the hook-aware backtrace
+    # above (its snapshot includes the hook stub's register spills).
+    thread_traces = []
+    for record in dump.threads:
+        if record.index == dump.crashing_index:
+            thread_traces.append((record, frames, truncated))
+        else:
+            thread_frames, thread_truncated = backtrace_mod.build_thread_backtrace(
+                record, table, max_frames=args.max_frames, hook_id=dump.hook_id)
+            thread_traces.append((record, thread_frames, thread_truncated))
 
     rom_info = None
     if args.rom:
@@ -188,10 +198,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         rom_path=str(args.rom) if args.rom else None,
     )
     if args.json:
-        payload = report_mod.build_json(dump, table, frames, truncated, rom_info, ctx)
+        payload = report_mod.build_json(dump, table, frames, truncated, rom_info, ctx,
+                                        thread_traces=thread_traces)
         print(json.dumps(payload, indent=2))
     else:
         raw_stack_limit = args.raw_stack if args.raw_stack else None
         print(report_mod.render_text(dump, table, frames, truncated, rom_info, ctx,
+                                     thread_traces=thread_traces,
                                      raw_stack_limit=raw_stack_limit))
     return EXIT_OK
