@@ -395,6 +395,7 @@ void CrashDumpWatchdogRoutine(void *arg)
     if (held_buttons.l && held_buttons.r && held_buttons.x && held_buttons.y)
     {
       CrashDumpTrigger();
+      OS_ResetSystem(1);
     }
     OS_SleepThread(NULL);
   }
