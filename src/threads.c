@@ -24,8 +24,8 @@
 #define VBLANK_ROUTINE_THREAD_PRIO 10
 #define MAIN_ROUTINE_THREAD_PRIO 30
 
-void VCount0Routine(void*);
-void MainRoutine(void*);
+void VCount0Routine(void *);
+void MainRoutine(void *);
 
 struct thread watchdog_thread;
 struct thread vblank_routine_thread;
@@ -35,7 +35,21 @@ uint64_t watchdog_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
 uint64_t vblank_routine_thread_stack[STACK_SIZE_2KB / sizeof(uint64_t)];
 uint64_t main_routine_thread_stack[STACK_SIZE_4KB / sizeof(uint64_t)];
 
-__attribute__((used)) void InitThreads(void) {
+// Dedicated wake queue for the mod's threads. The VCount 0 hook wakes the
+// queue as a whole (OS_WakeupThread) instead of poking each thread with
+// OS_WakeupThreadDirect: the queue wake properly unlinks the sleepers and
+// clears their thread::queue / thread::link fields, while a direct wake on a
+// thread that happens to be sleeping on another queue (e.g. inside
+// Card_LockRom / CARDi_WaitTask during UplinkPoll) leaves a stale linked node
+// behind and corrupts that queue's list. A BSS-zeroed os_thread_queue is
+// already a valid empty queue (head == tail == NULL), no init call needed.
+struct os_thread_queue mod_wake_queue;
+// Count of WakeupThreads() calls (one per VCount 0 since the threads were
+// created): recorded in crash dump records for hang diagnosis.
+uint32_t mod_wake_count = 0;
+
+__attribute__((used)) void InitThreads(void)
+{
   OS_CreateThread(&watchdog_thread, CrashDumpWatchdogRoutine, NULL,
                   watchdog_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
                   STACK_SIZE_1KB, WATCHDOG_THREAD_PRIO);
@@ -45,32 +59,46 @@ __attribute__((used)) void InitThreads(void) {
   OS_CreateThread(&main_routine_thread, MainRoutine, NULL,
                   main_routine_thread_stack + STACK_SIZE_4KB / sizeof(uint64_t),
                   STACK_SIZE_4KB, MAIN_ROUTINE_THREAD_PRIO);
+  // One-time startup wake per thread (the SDK idiom, see CARDi_InitCommon):
+  // OS_CreateThread leaves the thread waiting but not linked into any queue,
+  // so OS_WakeupThread(&mod_wake_queue) could never start it. This direct wake
+  // is safe here - freshly created threads have queue == NULL and empty link
+  // fields, so no stale queue node can result. Every later wake goes through
+  // the queue (see WakeupThreads).
+  OS_WakeupThreadDirect(&watchdog_thread);
+  OS_WakeupThreadDirect(&vblank_routine_thread);
+  OS_WakeupThreadDirect(&main_routine_thread);
   // Bring up the DSpico USB uplink (card lock is held briefly per
   // transaction; the game's own card I/O is never disturbed)
 }
 
-__attribute__((used)) void WakeupThreads(void) {
-  OS_WakeupThreadDirect(&watchdog_thread);
-  OS_WakeupThreadDirect(&vblank_routine_thread);
-  OS_WakeupThreadDirect(&main_routine_thread);
+__attribute__((used)) void WakeupThreads(void)
+{
+  mod_wake_count++;
+  // Wake the whole queue: waiters are unlinked cleanly (see mod_wake_queue).
+  OS_WakeupThread(&mod_wake_queue);
 }
 
 // High priority routine to perform every frame on VCount 0.
 // Currently just keeps track of the FPS and idle time.
 // Remember thread safety! When writing to a shared resource,
 // see what could happen in other threads
-void VCount0Routine(void*) {
-  while(true) {
+void VCount0Routine(void *)
+{
+  while (true)
+  {
     CalculateFPS();
     UpdateAPSIdleTime();
-    OS_SleepThread(NULL);
+    OS_SleepThread(&mod_wake_queue);
   }
 }
 
 // Low priority routine to minimize the performance impact of the
 // mod by only running it while we would be sleeping
-void MainRoutine(void*) {
-  while (true) {
+void MainRoutine(void *)
+{
+  while (true)
+  {
     // will only init if it isn't elready and if certain overlays are loaded
     UplinkInit();
     HandleSoftReset();
@@ -84,9 +112,9 @@ void MainRoutine(void*) {
     UpdateInputDisplay();
     UpdateHUDSlots();
     SaveIGT(true);
-    // Stream the memory samples over USB (runs only while the mod thread
-    // would otherwise be idle; pauses while the game holds the card lock)
+    //  Stream the memory samples over USB (runs only while the mod thread
+    //  would otherwise be idle; pauses while the game holds the card lock)
     UplinkPoll();
-    OS_SleepThread(NULL);
+    OS_SleepThread(&mod_wake_queue);
   }
 }

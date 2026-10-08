@@ -25,6 +25,12 @@ def make_thread_record(thread_id: int = 1,
                        stack_end: int = 0x23EF0800,
                        state: int = 0,
                        flags: int = None,
+                       regs=None,
+                       queue: int = 0,
+                       mutex: int = 0,
+                       link_prev: int = 0,
+                       link_next: int = 0,
+                       thread_ptr: int = 0x22B9100,
                        snapshot_words=None,
                        snapshot_bytes: int = None,
                        snapshot_bytes_field: int = None,
@@ -42,8 +48,13 @@ def make_thread_record(thread_id: int = 1,
     if flags is None:
         flags = dump_mod.THREAD_FLAG_SP_VALID
     stored = len(snap) if snapshot_bytes_field is None else snapshot_bytes_field
-    header = struct.pack("<11I", magic, thread_id, priority, pc, lr, sp,
-                         stack_start, stack_end, state, stored, flags)
+    if regs is None:
+        regs = [0] * 13
+    header = struct.pack("<29I", magic, thread_id, priority, pc, lr, sp,
+                         stack_start, stack_end, state, stored, flags,
+                         *([r & 0xFFFFFFFF for r in regs[:13]] +
+                           [0] * (13 - min(len(regs), 13))),
+                         queue, mutex, link_prev, link_next, thread_ptr)
     return header + snap
 
 
@@ -68,12 +79,19 @@ def make_record(hook_id: int = dump_mod.HOOK_FATAL_ERROR,
                 trigger_buttons: int = 0,
                 complete: bool = True,
                 stack_start: int = 0x23EF0000,
-                stack_end: int = 0x23EF0800) -> bytes:
-    """Build a synthetic 0x1000-byte crash dump record (format version 3).
+                stack_end: int = 0x23EF0800,
+                sys_busy_timeouts: int = 0,
+                sys_lock_skips: int = 0,
+                sys_lock_waits: int = 0,
+                sys_wake_count: int = 1234,
+                sys_frame_flags: int = 0xFFFFFFFF,
+                sys_queue_samples=None) -> bytes:
+    """Build a synthetic 0x1000-byte crash dump record (format version 4).
 
     ``threads`` is a list of raw thread record bytes (see make_thread_record);
     by default one record is generated for the current thread, using
-    ``stack_words`` as its snapshot.
+    ``stack_words`` as its snapshot. ``sys_queue_samples`` is a list of
+    (queue_ptr, head, tail) tuples (at most 3).
     """
     header = bytearray(dump_mod.HEADER_SIZE)
 
@@ -115,6 +133,16 @@ def make_record(hook_id: int = dump_mod.HOOK_FATAL_ERROR,
     put(dump_mod.OFF_THREADS_WRITTEN, threads_written)
     put(dump_mod.OFF_CRASHING_INDEX, crashing_index)
     put(dump_mod.OFF_TRIGGER_BUTTONS, trigger_buttons)
+    put(dump_mod.OFF_SYS_BUSY_TIMEOUTS, sys_busy_timeouts)
+    put(dump_mod.OFF_SYS_LOCK_SKIPS, sys_lock_skips)
+    put(dump_mod.OFF_SYS_LOCK_WAITS, sys_lock_waits)
+    put(dump_mod.OFF_SYS_WAKE_COUNT, sys_wake_count)
+    put(dump_mod.OFF_SYS_FRAME_FLAGS, sys_frame_flags)
+    if sys_queue_samples:
+        for i, (q, head, tail) in enumerate(sys_queue_samples[:dump_mod.SYS_QUEUE_SAMPLES]):
+            put(dump_mod.OFF_SYS_QUEUE_SAMPLES + 12 * i, q)
+            put(dump_mod.OFF_SYS_QUEUE_SAMPLES + 12 * i + 4, head)
+            put(dump_mod.OFF_SYS_QUEUE_SAMPLES + 12 * i + 8, tail)
     put(dump_mod.OFF_COMPLETE, 1 if complete else 0)
 
     if checksum is None:

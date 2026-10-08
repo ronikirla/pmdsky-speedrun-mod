@@ -42,10 +42,17 @@ void OS_CreateThread(struct thread *thread,
                      uint32_t stackSize,
                      uint32_t prio);
 void OS_WakeupThreadDirect(struct thread *thread);
-void OS_SleepThread(undefined *queue);
+void OS_WakeupThread(struct os_thread_queue *queue);
+void OS_SleepThread(struct os_thread_queue *queue);
 void OS_SetThreadPriority(struct thread *thread, uint32_t prio);
 uint32_t OS_GetThreadPriority(struct thread *thread);
 void OS_Sleep(uint32_t msec);
+
+// Mod thread wake queue and wake counter (defined in src/threads.c). All mod
+// threads sleep on this queue at their frame-wait points; the VCount 0 hook
+// wakes it as a whole. The counter is captured in crash dump records.
+extern struct os_thread_queue mod_wake_queue;
+extern uint32_t mod_wake_count;
 
 // pmdsky-debug declares FatalError with a pass-by-value prog_pos struct; the real
 // ABI (verified in the binary) is r0 = &prog_pos_info, r1 = fmt, r2+ = variadic.

@@ -6,6 +6,12 @@ thread, each with its own stack snapshot), all values little-endian.  The mod
 writes the record into the backup EEPROM at offset 0xB6B0, which maps 1:1
 onto the ``.sav`` file.
 
+Version 4 records add per-thread saved registers and OS wait-queue linkage
+(queue/mutex/link.prev/link.next/thread pointer) captured before the dump's
+own card writes, plus a header SYS block (uplink counters, frame flags, queue
+samples).  Only version 4 is supported: older records have a different
+layout.
+
 This module is intentionally dependency-free (standard library only).
 """
 
@@ -20,17 +26,17 @@ from typing import List, Optional
 EEPROM_BASE = 0xB6B0        # CRASH_DUMP_EEPROM_BASE
 RECORD_SIZE = 0x1000        # CRASH_DUMP_SIZE
 HEADER_SIZE = 0x100         # CRASH_DUMP_HEADER_SIZE
-MSG_MAX = 0x7F              # CRASH_DUMP_MSG_MAX
+MSG_MAX = 0x3F              # CRASH_DUMP_MSG_MAX (0x40-byte field incl. NUL)
 
 THREAD_TABLE_OFFSET = 0x100            # first thread record
-THREAD_RECORD_HEADER_SIZE = 0x2C       # CRASH_DUMP_THREAD_RECORD_HEADER_SIZE
-MAX_SNAPSHOT_BYTES = 0x3D4             # CRASH_DUMP_MAX_SNAPSHOT_BYTES
+THREAD_RECORD_HEADER_SIZE = 0x74       # CRASH_DUMP_THREAD_RECORD_HEADER_SIZE
+MAX_SNAPSHOT_BYTES = 0xDC              # CRASH_DUMP_MAX_SNAPSHOT_BYTES
 
 MAGIC = 0x48535243          # 'CRSH' when read little-endian
 MAGIC_BYTES = b"CRSH"
 THREAD_MAGIC = 0x44524854   # 'THRD'
 THREAD_MAGIC_BYTES = b"THRD"
-RECORD_VERSION = 3          # CRASH_DUMP_VERSION
+RECORD_VERSION = 4          # CRASH_DUMP_VERSION
 
 HOOK_FATAL_ERROR = 1        # CRASH_DUMP_HOOK_FATAL_ERROR
 HOOK_OS_PANIC = 2           # CRASH_DUMP_HOOK_OS_PANIC
@@ -50,6 +56,7 @@ THREAD_STATE_NAMES = {
 
 THREAD_FLAG_SP_VALID = 1    # sp is inside the recorded stack bounds
 THREAD_FLAG_CURRENT = 2     # record 0: the current/crashing thread
+THREAD_FLAG_SP_OUTSIDE = 4  # sp outside the bounds; snapshot from sp anyway
 
 OFF_MAGIC = 0x000
 OFF_VERSION = 0x004
@@ -67,7 +74,16 @@ OFF_THREAD_COUNT = 0x06C
 OFF_THREADS_WRITTEN = 0x070
 OFF_CRASHING_INDEX = 0x074
 OFF_TRIGGER_BUTTONS = 0x078
-OFF_MSG = 0x07C
+OFF_MSG = 0x07C             # msg at 0x07C..0x0BB (0x40 bytes)
+# SYS block (captured before the dump's first card write), 0x0BC..0x0FB.
+OFF_SYS_BUSY_TIMEOUTS = 0x0BC
+OFF_SYS_LOCK_SKIPS = 0x0C0
+OFF_SYS_LOCK_WAITS = 0x0C4
+OFF_SYS_WAKE_COUNT = 0x0C8
+OFF_SYS_FRAME_FLAGS = 0x0CC
+OFF_SYS_QUEUE_SAMPLES = 0x0D0   # 3 x {ptr, head, tail} words
+SYS_QUEUE_SAMPLES = 3
+OFF_SYS_RESERVED = 0x0F4
 OFF_COMPLETE = 0x0FC
 
 THREAD_OFF_MAGIC = 0x00
@@ -81,9 +97,16 @@ THREAD_OFF_STACK_END = 0x1C
 THREAD_OFF_STATE = 0x20
 THREAD_OFF_SNAPSHOT_BYTES = 0x24
 THREAD_OFF_FLAGS = 0x28
-THREAD_OFF_SNAPSHOT = 0x2C
+THREAD_OFF_REGS = 0x2C          # r0..r12 at 0x2C..0x5F (13 words)
+THREAD_OFF_QUEUE = 0x60
+THREAD_OFF_MUTEX = 0x64
+THREAD_OFF_LINK_PREV = 0x68
+THREAD_OFF_LINK_NEXT = 0x6C
+THREAD_OFF_THREAD_PTR = 0x70
+THREAD_OFF_SNAPSHOT = 0x74
 
 HEADER_WORD_COUNT = HEADER_SIZE // 4
+THREAD_HEADER_WORD_COUNT = THREAD_RECORD_HEADER_SIZE // 4
 # The checksum covers the whole header except its own word and the complete
 # flag (written last, after everything else).
 CHECKSUM_EXCLUDED_INDICES = {OFF_CHECKSUM // 4, OFF_COMPLETE // 4}
@@ -112,11 +135,14 @@ class CleanSaveError(DumpError):
 
 @dataclass
 class ThreadRecord:
-    """One thread's record: metadata plus a stack snapshot.
+    """One thread's record: metadata, registers, wait-queue linkage and a
+    stack snapshot.
 
     ``pc``/``lr``/``sp`` are the thread's saved state: for record 0 (the
     current thread) they are the crash/trigger site; for the other threads
-    they come from the thread's ``os_context`` at capture time.
+    they come from the thread's ``os_context`` at capture time.  ``queue``,
+    ``mutex``, ``link_prev``, ``link_next`` and ``state`` were sampled before
+    the dump's first card write (see ``CrashDumpEmit`` in the mod source).
     """
 
     index: int
@@ -131,6 +157,12 @@ class ThreadRecord:
     state: int
     snapshot_bytes: int
     flags: int
+    regs: List[int]                 # r0..r12 (13 entries)
+    queue: int                      # thread::queue (wait queue, 0 = NULL)
+    mutex: int                      # thread::mutex (0 = none)
+    link_prev: int                  # thread::link.prev (queue chain)
+    link_next: int                  # thread::link.next (queue chain)
+    thread_ptr: int                 # struct thread* (queue-chain key)
     snapshot: bytes                 # starts at absolute address `sp`
 
     @property
@@ -140,6 +172,10 @@ class ThreadRecord:
     @property
     def sp_valid(self) -> bool:
         return bool(self.flags & THREAD_FLAG_SP_VALID)
+
+    @property
+    def sp_outside(self) -> bool:
+        return bool(self.flags & THREAD_FLAG_SP_OUTSIDE)
 
     @property
     def state_name(self) -> str:
@@ -152,6 +188,40 @@ class ThreadRecord:
 
     def stack_words(self) -> List[int]:
         return list(struct.unpack("<%dI" % (len(self.snapshot) // 4), self.snapshot))
+
+
+@dataclass
+class QueueSample:
+    """One captured wait queue (os_thread_queue: head/tail of the chain)."""
+
+    queue: int      # struct os_thread_queue*
+    head: int       # first struct thread* in the chain (0 = empty/unknown)
+    tail: int       # last struct thread* in the chain
+
+
+@dataclass
+class SysInfo:
+    """The header SYS block: system state sampled before the dump's writes."""
+
+    uplink_card_busy_timeouts: int
+    uplink_card_lock_skips: int
+    uplink_card_lock_waits: int
+    mod_wake_count: int
+    frame_flags_raw: int            # DAT_02003aac[0],[7],[9],[10] as bytes
+    queue_samples: List[QueueSample]
+
+    @property
+    def frame_flags(self) -> Optional[dict]:
+        """Decoded frame-sync flags, or None when the capture was unavailable."""
+        if self.frame_flags_raw == 0xFFFFFFFF:
+            return None
+        raw = self.frame_flags_raw
+        return {
+            "flag0": raw & 0xFF,
+            "flag7": (raw >> 8) & 0xFF,
+            "flag9": (raw >> 16) & 0xFF,
+            "flag10": (raw >> 24) & 0xFF,
+        }
 
 
 @dataclass
@@ -181,6 +251,7 @@ class CrashDump:
     crashing_index: int
     trigger_buttons: int
     complete: bool
+    sys: SysInfo
     threads: List[ThreadRecord]
     source_offset: int
     warnings: List[str] = field(default_factory=list)
@@ -350,9 +421,11 @@ def parse_thread_records(record: bytes, expected: int,
                 "'THRD' magic." % (index, hex(offset))
             )
             break
-        fields = struct.unpack_from("<11I", record, offset)
+        fields = struct.unpack_from("<%dI" % THREAD_HEADER_WORD_COUNT, record, offset)
         (magic, thread_id, priority, pc, lr, sp, stack_start, stack_end,
-         state, snapshot_bytes, flags) = fields
+         state, snapshot_bytes, flags) = fields[:11]
+        regs = list(fields[11:24])
+        (queue, mutex, link_prev, link_next, thread_ptr) = fields[24:29]
         if snapshot_bytes % 4 != 0:
             warnings.append(
                 "Thread %d: snapshot_bytes %d is not a multiple of 4; "
@@ -381,10 +454,34 @@ def parse_thread_records(record: bytes, expected: int,
             state=state,
             snapshot_bytes=snapshot_bytes,
             flags=flags,
+            regs=regs,
+            queue=queue,
+            mutex=mutex,
+            link_prev=link_prev,
+            link_next=link_next,
+            thread_ptr=thread_ptr,
             snapshot=snapshot,
         ))
         offset += THREAD_RECORD_HEADER_SIZE + snapshot_bytes
     return threads
+
+
+def parse_sys_block(record: bytes) -> SysInfo:
+    """Decode the header SYS block (system state pre-dump-writes)."""
+    words = struct.unpack_from("<16I", record, OFF_SYS_BUSY_TIMEOUTS)
+    samples: List[QueueSample] = []
+    for i in range(SYS_QUEUE_SAMPLES):
+        q, head, tail = words[5 + i * 3:8 + i * 3]
+        if q != 0:
+            samples.append(QueueSample(queue=q, head=head, tail=tail))
+    return SysInfo(
+        uplink_card_busy_timeouts=words[0],
+        uplink_card_lock_skips=words[1],
+        uplink_card_lock_waits=words[2],
+        mod_wake_count=words[3],
+        frame_flags_raw=words[4],
+        queue_samples=samples,
+    )
 
 
 def parse_record(record: bytes, source_offset: int = 0) -> CrashDump:
@@ -392,9 +489,8 @@ def parse_record(record: bytes, source_offset: int = 0) -> CrashDump:
 
     Validation problems (bad magic, checksum, truncated thread table) are
     collected into ``warnings`` instead of aborting: a partially corrupted
-    record is still worth reporting.  A record with valid magic but an
-    unsupported version is rejected outright: version 2 records (single stack
-    snapshot, written by older mod builds) cannot be interpreted as version 3.
+    record is still worth reporting.  A record with valid magic but a
+    different version is rejected outright: only version 4 is supported.
     """
     if len(record) < RECORD_SIZE:
         raise DumpError(
@@ -410,8 +506,8 @@ def parse_record(record: bytes, source_offset: int = 0) -> CrashDump:
     if magic == MAGIC and record_version != RECORD_VERSION:
         raise DumpError(
             "Unsupported crash dump record version %d (this parser reads "
-            "version %d). Version 2 records written by older mod builds have "
-            "a different layout and can no longer be decoded."
+            "version %d only). Records written by older mod builds have a "
+            "different layout and can no longer be decoded."
             % (record_version, RECORD_VERSION)
         )
     if magic != MAGIC:
@@ -470,6 +566,7 @@ def parse_record(record: bytes, source_offset: int = 0) -> CrashDump:
     crashing_index = words[OFF_CRASHING_INDEX // 4]
     trigger_buttons = words[OFF_TRIGGER_BUTTONS // 4]
     complete = words[OFF_COMPLETE // 4] != 0
+    sys_block = parse_sys_block(record)
     if not complete:
         warnings.append(
             "The complete flag is not set: the dump was interrupted while it "
@@ -518,7 +615,161 @@ def parse_record(record: bytes, source_offset: int = 0) -> CrashDump:
         crashing_index=crashing_index,
         trigger_buttons=trigger_buttons,
         complete=complete,
+        sys=sys_block,
         threads=threads,
         source_offset=source_offset,
         warnings=warnings,
     )
+
+
+# --- Wait-queue chain analysis ---------------------------------------------
+#
+# The bug this analysis exists for: a direct wake (OS_WakeupThreadDirect) on a
+# thread that was sleeping on a queue does NOT unlink it, so the stale node
+# stays in that queue's chain and the thread's single link node gets rewritten
+# by its next sleep elsewhere - splicing two queue lists together. Later
+# OS_WakeupThread walks then lose waiters forever. The signature of that
+# corruption shows up in the captured linkage: a thread unreachable from its
+# queue's head, chains crossing between queues, or link pairs that do not
+# reciprocate.
+
+
+@dataclass
+class QueueFinding:
+    """One anomaly found while walking the captured wait-queue chains."""
+
+    kind: str       # 'lost_waiter', 'cross_splice', 'broken_link', 'cycle'
+    detail: str
+    thread_ptrs: List[int] = field(default_factory=list)
+
+
+@dataclass
+class QueueAnalysis:
+    """Result of analyze_thread_queues()."""
+
+    findings: List[QueueFinding]
+    # queue pointer -> thread_ptr chain as walked from the captured head
+    chains: dict
+
+    @property
+    def clean(self) -> bool:
+        return not self.findings
+
+
+def analyze_thread_queues(dump: CrashDump) -> QueueAnalysis:
+    """Walk the captured wait-queue chains and flag corruption signatures.
+
+    Uses only data frozen before the dump's own card writes: per-thread
+    ``queue``/``link_prev``/``link_next``/``thread_ptr`` and the SYS block's
+    queue samples (queue pointer + chain head/tail).
+    """
+    findings: List[QueueFinding] = []
+    by_ptr = {t.thread_ptr: t for t in dump.threads if t.thread_ptr}
+
+    # 1. Internal consistency of every recorded link pair: if A.link_next == B
+    #    then B.link_prev must == A and both must name the same queue.
+    for t in dump.threads:
+        checks = ((t.link_next, "next"), (t.link_prev, "prev"))
+        for other_ptr, direction in checks:
+            if not other_ptr:
+                continue
+            other = by_ptr.get(other_ptr)
+            if other is None:
+                findings.append(QueueFinding(
+                    kind="broken_link",
+                    detail=("thread %s: link.%s -> 0x%08X, which is not one of "
+                            "the dumped threads (terminated, or the dump is "
+                            "truncated)"
+                            % (_thread_label(t), direction, other_ptr)),
+                    thread_ptrs=[t.thread_ptr],
+                ))
+                continue
+            back = other.link_prev if direction == "next" else other.link_next
+            if back != t.thread_ptr:
+                findings.append(QueueFinding(
+                    kind="broken_link",
+                    detail=("thread %s: link.%s -> %s but the back link is "
+                            "0x%08X, expected 0x%08X (node rewritten by a "
+                            "second sleep - the queue-splice signature)"
+                            % (_thread_label(t), direction, _thread_label(other),
+                               back, t.thread_ptr)),
+                    thread_ptrs=[t.thread_ptr, other.thread_ptr],
+                ))
+            if t.queue and other.queue and t.queue != other.queue:
+                findings.append(QueueFinding(
+                    kind="cross_splice",
+                    detail=("thread %s (queue 0x%08X) links to thread %s "
+                            "(queue 0x%08X): two queue lists are spliced "
+                            "together" % (_thread_label(t), t.queue,
+                                          _thread_label(other), other.queue)),
+                    thread_ptrs=[t.thread_ptr, other.thread_ptr],
+                ))
+
+    # 2. Walk each captured queue sample from its head and compare the reached
+    #    chain against the threads that claim that queue.
+    chains: dict = {}
+    sampled = {s.queue: s for s in dump.sys.queue_samples}
+    queues = set(sampled) | {t.queue for t in dump.threads if t.queue}
+    for q in sorted(queues):
+        members = [t for t in dump.threads if t.queue == q]
+        sample = sampled.get(q)
+        chain: List[int] = []
+        seen = set()
+        node = sample.head if sample else _chain_head(members)
+        while node:
+            if node in seen:
+                findings.append(QueueFinding(
+                    kind="cycle",
+                    detail=("queue 0x%08X: chain loops back at thread "
+                            "0x%08X" % (q, node)),
+                    thread_ptrs=sorted(seen),
+                ))
+                break
+            seen.add(node)
+            chain.append(node)
+            t = by_ptr.get(node)
+            if t is None:
+                findings.append(QueueFinding(
+                    kind="broken_link",
+                    detail=("queue 0x%08X: chain node 0x%08X is not one of "
+                            "the dumped threads" % (q, node)),
+                    thread_ptrs=[],
+                ))
+                break
+            node = t.link_next
+        chains[q] = chain
+
+        lost = [t.thread_ptr for t in members if t.thread_ptr not in seen]
+        if lost:
+            findings.append(QueueFinding(
+                kind="lost_waiter",
+                detail=("queue 0x%08X: thread(s) %s claim this queue but are "
+                        "unreachable from its head - the lost-waiter signature "
+                        "of the stale-node bug"
+                        % (q, ", ".join("0x%08X" % p for p in lost))),
+                thread_ptrs=lost,
+            ))
+        if sample and chain and sample.tail and chain[-1] != sample.tail:
+            findings.append(QueueFinding(
+                kind="broken_link",
+                detail=("queue 0x%08X: chain ends at 0x%08X but the captured "
+                        "tail is 0x%08X" % (q, chain[-1], sample.tail)),
+                thread_ptrs=[chain[-1]],
+            ))
+
+    return QueueAnalysis(findings=findings, chains=chains)
+
+
+def _thread_label(t: ThreadRecord) -> str:
+    if t.known:
+        return "id %d (0x%08X)" % (t.thread_id, t.thread_ptr)
+    return "0x%08X" % t.thread_ptr
+
+
+def _chain_head(members: List[ThreadRecord]) -> int:
+    """Head of the chain among threads claiming a queue (no sample available)."""
+    ptrs = {t.thread_ptr for t in members}
+    for t in members:
+        if t.link_prev not in ptrs:
+            return t.thread_ptr
+    return members[0].thread_ptr if members else 0

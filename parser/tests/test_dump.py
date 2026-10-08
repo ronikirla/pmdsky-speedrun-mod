@@ -73,6 +73,12 @@ class ParseRecordTests(unittest.TestCase):
         with self.assertRaises(dump_mod.DumpError):
             dump_mod.parse_record(make_record(version=99))
 
+    def test_v3_record_rejected(self):
+        # Version 3 (the previous format) is no longer supported.
+        with self.assertRaises(dump_mod.DumpError) as ctx:
+            dump_mod.parse_record(make_record(version=3))
+        self.assertIn("version 3", str(ctx.exception))
+
     def test_v2_record_rejected(self):
         with self.assertRaises(dump_mod.DumpError) as ctx:
             dump_mod.parse_record(make_record(version=2))
@@ -139,7 +145,7 @@ class ThreadTableTests(unittest.TestCase):
         rec = make_thread_record(snapshot_words=[0] * 8, snapshot_bytes_field=0x10000)
         dump = dump_mod.parse_record(make_record(threads=[rec], msg=b""))
         record = dump.threads[0]
-        self.assertEqual(record.snapshot_bytes, 0xED4)
+        self.assertEqual(record.snapshot_bytes, 0xE8C)
         self.assertTrue(any("runs past the end" in w for w in dump.warnings))
 
     def test_snapshot_bytes_rounded_down(self):
@@ -162,6 +168,104 @@ class ThreadTableTests(unittest.TestCase):
         dump = dump_mod.parse_record(make_record(crashing_index=5))
         self.assertEqual(dump.crashing_index, 0)
         self.assertTrue(any("out of range" in w for w in dump.warnings))
+
+
+class V4FieldsTests(unittest.TestCase):
+    def test_thread_registers_and_linkage(self):
+        rec = make_thread_record(
+            regs=[0x100 + i for i in range(13)],
+            queue=0x23D90000, mutex=0x23D90100,
+            link_prev=0x22B9200, link_next=0x22B9300,
+            thread_ptr=0x22B9100)
+        dump = dump_mod.parse_record(make_record(threads=[rec], msg=b""))
+        t = dump.threads[0]
+        self.assertEqual(t.regs[0], 0x100)
+        self.assertEqual(t.regs[12], 0x10C)
+        self.assertEqual(t.queue, 0x23D90000)
+        self.assertEqual(t.mutex, 0x23D90100)
+        self.assertEqual(t.link_prev, 0x22B9200)
+        self.assertEqual(t.link_next, 0x22B9300)
+        self.assertEqual(t.thread_ptr, 0x22B9100)
+
+    def test_sp_outside_flag(self):
+        rec = make_thread_record(flags=dump_mod.THREAD_FLAG_SP_OUTSIDE)
+        dump = dump_mod.parse_record(make_record(threads=[rec], msg=b""))
+        t = dump.threads[0]
+        self.assertFalse(t.sp_valid)
+        self.assertTrue(t.sp_outside)
+
+    def test_sys_block(self):
+        dump = dump_mod.parse_record(make_record(
+            msg=b"",
+            sys_busy_timeouts=1, sys_lock_skips=2, sys_lock_waits=3,
+            sys_wake_count=4,
+            sys_frame_flags=0x0A090700,
+            sys_queue_samples=[(0x23D90000, 0x22B9100, 0x22B9300),
+                               (0x23D90400, 0, 0)]))
+        self.assertEqual(dump.sys.uplink_card_busy_timeouts, 1)
+        self.assertEqual(dump.sys.uplink_card_lock_skips, 2)
+        self.assertEqual(dump.sys.uplink_card_lock_waits, 3)
+        self.assertEqual(dump.sys.mod_wake_count, 4)
+        self.assertEqual(dump.sys.frame_flags,
+                         {"flag0": 0x00, "flag7": 0x07, "flag9": 0x09, "flag10": 0x0A})
+        self.assertEqual(len(dump.sys.queue_samples), 2)
+        self.assertEqual(dump.sys.queue_samples[0].head, 0x22B9100)
+
+    def test_frame_flags_unavailable(self):
+        dump = dump_mod.parse_record(make_record(msg=b"", sys_frame_flags=0xFFFFFFFF))
+        self.assertIsNone(dump.sys.frame_flags)
+
+
+class QueueAnalysisTests(unittest.TestCase):
+    def _three_thread_dump(self, link_next_a, link_next_b, link_prev_b,
+                           queue_b, sample_head=0x22B9100):
+        a = make_thread_record(thread_id=1, queue=0x23D90000,
+                               link_prev=0, link_next=link_next_a,
+                               thread_ptr=0x22B9100)
+        b = make_thread_record(thread_id=2, queue=queue_b,
+                               link_prev=link_prev_b, link_next=link_next_b,
+                               thread_ptr=0x22B9200)
+        c = make_thread_record(thread_id=3, queue=0x23D90000,
+                               link_prev=0x22B9200, link_next=0,
+                               thread_ptr=0x22B9300)
+        return dump_mod.parse_record(make_record(
+            threads=[a, b, c], msg=b"",
+            sys_queue_samples=[(0x23D90000, sample_head, 0x22B9300)]))
+
+    def test_clean_chain(self):
+        dump = self._three_thread_dump(0x22B9200, 0x22B9300, 0x22B9100, 0x23D90000)
+        analysis = dump_mod.analyze_thread_queues(dump)
+        self.assertTrue(analysis.clean)
+        self.assertEqual(analysis.chains[0x23D90000], [0x22B9100, 0x22B9200, 0x22B9300])
+
+    def test_lost_waiter(self):
+        # b claims the queue but is unreachable from its head (a -> c directly).
+        dump = self._three_thread_dump(0x22B9300, 0, 0x22B9100, 0x23D90000)
+        analysis = dump_mod.analyze_thread_queues(dump)
+        lost = [f for f in analysis.findings if f.kind == "lost_waiter"]
+        self.assertEqual(len(lost), 1)
+        self.assertIn(0x22B9200, lost[0].thread_ptrs)
+
+    def test_cross_splice(self):
+        # a (queue 0x23D90000) links to b which claims a different queue.
+        dump = self._three_thread_dump(0x22B9200, 0x22B9300, 0x22B9100, 0x23D90999)
+        analysis = dump_mod.analyze_thread_queues(dump)
+        splices = [f for f in analysis.findings if f.kind == "cross_splice"]
+        self.assertTrue(splices)
+
+    def test_broken_back_link(self):
+        # b.link_prev points at something other than a: the stale-node signature.
+        dump = self._three_thread_dump(0x22B9200, 0x22B9300, 0x22B9DEAD, 0x23D90000)
+        analysis = dump_mod.analyze_thread_queues(dump)
+        broken = [f for f in analysis.findings if f.kind == "broken_link"]
+        self.assertTrue(broken)
+
+    def test_cycle(self):
+        # a -> b -> a.
+        dump = self._three_thread_dump(0x22B9200, 0x22B9100, 0x22B9100, 0x23D90000)
+        analysis = dump_mod.analyze_thread_queues(dump)
+        cycles = [f for f in analysis.findings if f.kind == "cycle"]
+        self.assertTrue(cycles)
 
 
 class LocateRecordTests(unittest.TestCase):

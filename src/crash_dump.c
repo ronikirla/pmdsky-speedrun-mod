@@ -25,16 +25,54 @@ struct crash_thread_slot
   struct thread *t;
   uint32_t lo;
   uint32_t hi;
-  bool bounds_ok;
 };
 
-#define CRASH_DUMP_MAX_THREADS 16
 // A thread whose stack area is larger than this is not a plausible struct.
 #define CRASH_DUMP_MAX_STACK_SIZE 0x10000
 #define CRASH_DUMP_MAIN_RAM_START 0x02000000
-#define CRASH_DUMP_MAIN_RAM_END 0x02400000
+// Main RAM end for the purposes of this dump. The DS proper has 4 MB, but the
+// DSi (and nds-bootstrap) run with extended main RAM and the game's boot
+// thread demonstrably lives at 0x027E2080..0x027E3780 on real hardware, so
+// anything below 0x03000000 is a plausible address.
+#define CRASH_DUMP_MAIN_RAM_END 0x03000000
+
+// Per-thread wait-state fields, sampled BEFORE Card_LockBackup: the dump's
+// own card writes park threads on the very lock/busy queues being diagnosed
+// (and a running game keeps scheduling), so the queue linkage must be frozen
+// before the first write. Registers/pc/lr/sp are re-read at stage time as
+// before (frozen anyway on a hung game).
+struct crash_thread_view
+{
+  uint32_t state;
+  uint32_t queue;
+  uint32_t mutex;
+  uint32_t link_prev;
+  uint32_t link_next;
+};
+static struct crash_thread_view crash_prelock_views[CRASH_DUMP_MAX_THREADS];
+
+// Header SYS block, sampled before Card_LockBackup (see StageHeader).
+static uint32_t crash_sys_block[16];
+
+// Frame-sync flags read by CustomWaitTillVBlank (src/optimizations.c): the
+// symbol is a pointer to the flag array. Mirrors the declaration there.
+extern bool *DAT_02003aac;
+
+// Uplink/diagnostic counters live in the stdint world (src/uplink/*); declare
+// them here with the pmdsky-style type instead of including the uplink
+// header, which would collide with pmdsky.h's typedefs.
+extern uint32_t uplink_card_busy_timeouts;
+extern uint32_t uplink_card_lock_skips;
+extern uint32_t uplink_card_lock_waits;
 
 static struct crash_thread_slot crash_thread_slots[CRASH_DUMP_MAX_THREADS];
+
+// True when the recorded stack area is plausible (right size, inside RAM).
+static bool SlotBoundsOk(const struct crash_thread_slot *slot)
+{
+  return (slot->hi - slot->lo) <= CRASH_DUMP_MAX_STACK_SIZE &&
+         slot->lo >= CRASH_DUMP_MAIN_RAM_START && slot->hi <= CRASH_DUMP_MAIN_RAM_END;
+}
 
 // Walk the priority-sorted thread list (thread_info::thread_list_head, head =
 // highest priority) and collect one slot per thread. Pointers that cannot
@@ -74,14 +112,12 @@ static uint32_t CollectThreadSlots(uint32_t sp_base, int *current_index)
     uint32_t b = (uint32_t)t->stack_end_pointer;
     slot->lo = (a < b) ? a : b;
     slot->hi = (a < b) ? b : a;
-    slot->bounds_ok = (slot->hi - slot->lo) <= CRASH_DUMP_MAX_STACK_SIZE &&
-                      slot->lo >= CRASH_DUMP_MAIN_RAM_START && slot->hi <= CRASH_DUMP_MAIN_RAM_END;
     count++;
     t = t->next_thread;
   }
   for (uint32_t j = 0; j < count; j++)
   {
-    if (crash_thread_slots[j].bounds_ok &&
+    if (SlotBoundsOk(&crash_thread_slots[j]) &&
         sp_base >= crash_thread_slots[j].lo && sp_base < crash_thread_slots[j].hi)
     {
       *current_index = (int)j;
@@ -89,6 +125,82 @@ static uint32_t CollectThreadSlots(uint32_t sp_base, int *current_index)
     }
   }
   return count;
+}
+
+// Sample the per-thread wait state and the SYS block BEFORE the dump's first
+// card write. The dump itself parks threads on cardi_common's lock_queue /
+// busy_q while it writes (and a live game keeps scheduling), so queue linkage
+// captured later would describe the dump, not the hang. Registers and stacks
+// are still re-read at stage time (frozen on a hung game anyway).
+static void CapturePreLockState(uint32_t n_slots)
+{
+  for (uint32_t i = 0; i < n_slots; i++)
+  {
+    struct thread *t = crash_thread_slots[i].t;
+    crash_prelock_views[i].state = (uint32_t)t->state;
+    crash_prelock_views[i].queue = (uint32_t)t->queue;
+    crash_prelock_views[i].mutex = (uint32_t)t->mutex;
+    crash_prelock_views[i].link_prev = (uint32_t)t->link.prev;
+    crash_prelock_views[i].link_next = (uint32_t)t->link.next;
+  }
+
+  for (uint32_t i = 0; i < 16; i++)
+  {
+    crash_sys_block[i] = 0;
+  }
+  crash_sys_block[0] = uplink_card_busy_timeouts;
+  crash_sys_block[1] = uplink_card_lock_skips;
+  crash_sys_block[2] = uplink_card_lock_waits;
+  crash_sys_block[3] = mod_wake_count;
+
+  // Frame-sync flags (DAT_02003aac is a pointer to the flag byte array).
+  // Unavailable -> all-ones so the parser reports them as unknown.
+  crash_sys_block[4] = 0xFFFFFFFF;
+  {
+    uint32_t flags_addr = (uint32_t)DAT_02003aac;
+    if (flags_addr >= CRASH_DUMP_MAIN_RAM_START && flags_addr + 11 < CRASH_DUMP_MAIN_RAM_END)
+    {
+      const uint8_t *f = (const uint8_t *)flags_addr;
+      crash_sys_block[4] = (uint32_t)f[0] | ((uint32_t)f[7] << 8) |
+                           ((uint32_t)f[9] << 16) | ((uint32_t)f[10] << 24);
+    }
+  }
+
+  // Queue samples: up to CRASH_DUMP_SYS_QUEUE_SAMPLES distinct thread::queue
+  // pointers across the dumped threads, with their head/tail so the parser
+  // can walk the chains and spot lost waiters / spliced lists. Pointers are
+  // validated before dereference; unusable slots stay 0.
+  uint32_t samples = 0;
+  for (uint32_t i = 0; i < n_slots && samples < CRASH_DUMP_SYS_QUEUE_SAMPLES; i++)
+  {
+    uint32_t q = crash_prelock_views[i].queue;
+    if (q == 0)
+    {
+      continue;
+    }
+    if ((q & 3) != 0 || q < CRASH_DUMP_MAIN_RAM_START || q + 8 > CRASH_DUMP_MAIN_RAM_END)
+    {
+      continue;
+    }
+    bool dup = false;
+    for (uint32_t j = 0; j < samples; j++)
+    {
+      if (crash_sys_block[5 + j * 3] == q)
+      {
+        dup = true;
+        break;
+      }
+    }
+    if (dup)
+    {
+      continue;
+    }
+    const uint32_t *words = (const uint32_t *)q;
+    crash_sys_block[5 + samples * 3] = q;
+    crash_sys_block[5 + samples * 3 + 1] = words[0]; // os_thread_queue::head
+    crash_sys_block[5 + samples * 3 + 2] = words[1]; // os_thread_queue::tail
+    samples++;
+  }
 }
 
 // Stage the 0x100 header (including the checksum) into the staging buffer.
@@ -147,6 +259,13 @@ static void StageHeader(uint32_t hook_id, const uint32_t *regs,
     }
   }
 
+  // SYS block: counters/frame flags/queue samples captured before the first
+  // card write (see CapturePreLockState).
+  for (uint32_t i = 0; i < 16; i++)
+  {
+    header[CRASH_DUMP_OFF_SYS_BUSY_TIMEOUTS / 4 + i] = crash_sys_block[i];
+  }
+
   // Checksum covers the whole header except the checksum word itself and the
   // complete flag (which is only written after everything else).
   uint32_t checksum = 0;
@@ -163,11 +282,15 @@ static void StageHeader(uint32_t hook_id, const uint32_t *regs,
 
 // Stage one thread record into the staging buffer. The snapshot gets a fair
 // share of what is left of the record region (so all threads always fit),
-// clamped to the thread's used stack and the staging buffer size.
+// clamped to the thread's used stack and the staging buffer size. The wait
+// state (state/queue/mutex/link) comes from the pre-lock capture; registers
+// come from regs13 (hook regs for the current thread, os_context for others).
 // Returns the staged byte count (0 when the region is full); *rec_offset gets
 // the offset inside the record where the caller must write it.
 static uint32_t StageThreadRecord(uint32_t offset, uint32_t *records_left,
                                   struct crash_thread_slot *slot,
+                                  const struct crash_thread_view *view,
+                                  const uint32_t *regs13,
                                   uint32_t sp, uint32_t pc, uint32_t lr,
                                   bool is_current, uint32_t *rec_offset)
 {
@@ -184,8 +307,9 @@ static uint32_t StageThreadRecord(uint32_t offset, uint32_t *records_left,
   {
     max_snap = CRASH_DUMP_MAX_SNAPSHOT_BYTES;
   }
-  bool sp_valid = slot != NULL && slot->bounds_ok && sp >= slot->lo && sp < slot->hi;
+  bool sp_valid = slot != NULL && SlotBoundsOk(slot) && sp >= slot->lo && sp < slot->hi;
   uint32_t snap = 0;
+  uint32_t extra_flags = 0;
   if (sp_valid)
   {
     snap = slot->hi - sp;
@@ -194,19 +318,19 @@ static uint32_t StageThreadRecord(uint32_t offset, uint32_t *records_left,
       snap = max_snap;
     }
   }
-  else if (is_current)
+  else if (sp >= CRASH_DUMP_MAIN_RAM_START && sp < CRASH_DUMP_MAIN_RAM_END)
   {
-    // The live stack of the triggering thread: the sp is known good even when
-    // no struct thread matched it (e.g. crash before the thread was inserted
-    // into the list).
-    if (sp < CRASH_DUMP_MAIN_RAM_END)
+    // The sp is outside the recorded stack bounds (or no struct thread matched
+    // it - e.g. a crash before the thread was inserted into the list): the sp
+    // is still a plausible stack pointer, so capture upward from it instead of
+    // dropping the record's stack entirely. Record #10 of the 2026-10-07 dump
+    // (id 0, sp below its 0x027E2080..0x027E3780 stack) is exactly this case.
+    snap = max_snap;
+    if (sp + snap > CRASH_DUMP_MAIN_RAM_END)
     {
-      snap = max_snap;
-      if (sp + snap > CRASH_DUMP_MAIN_RAM_END)
-      {
-        snap = CRASH_DUMP_MAIN_RAM_END - sp;
-      }
+      snap = CRASH_DUMP_MAIN_RAM_END - sp;
     }
+    extra_flags = CRASH_DUMP_THREAD_FLAG_SP_OUTSIDE;
   }
   snap &= ~3u;
 
@@ -219,10 +343,20 @@ static uint32_t StageThreadRecord(uint32_t offset, uint32_t *records_left,
   rec[CRASH_DUMP_THREAD_OFF_SP / 4] = sp;
   rec[CRASH_DUMP_THREAD_OFF_STACK_START / 4] = slot ? slot->lo : 0;
   rec[CRASH_DUMP_THREAD_OFF_STACK_END / 4] = slot ? slot->hi : 0;
-  rec[CRASH_DUMP_THREAD_OFF_STATE / 4] = (slot && slot->t) ? (uint32_t)slot->t->state : 0xFFFFFFFF;
+  rec[CRASH_DUMP_THREAD_OFF_STATE / 4] = view ? view->state : 0xFFFFFFFF;
   rec[CRASH_DUMP_THREAD_OFF_SNAPSHOT_BYTES / 4] = snap;
   rec[CRASH_DUMP_THREAD_OFF_FLAGS / 4] = (sp_valid ? CRASH_DUMP_THREAD_FLAG_SP_VALID : 0) |
-                                         (is_current ? CRASH_DUMP_THREAD_FLAG_CURRENT : 0);
+                                         (is_current ? CRASH_DUMP_THREAD_FLAG_CURRENT : 0) |
+                                         extra_flags;
+  for (uint32_t i = 0; i < 13; i++)
+  {
+    rec[(CRASH_DUMP_THREAD_OFF_REGS / 4) + i] = regs13 ? regs13[i] : 0;
+  }
+  rec[CRASH_DUMP_THREAD_OFF_QUEUE / 4] = view ? view->queue : 0;
+  rec[CRASH_DUMP_THREAD_OFF_MUTEX / 4] = view ? view->mutex : 0;
+  rec[CRASH_DUMP_THREAD_OFF_LINK_PREV / 4] = view ? view->link_prev : 0;
+  rec[CRASH_DUMP_THREAD_OFF_LINK_NEXT / 4] = view ? view->link_next : 0;
+  rec[CRASH_DUMP_THREAD_OFF_THREAD_PTR / 4] = (slot && slot->t) ? (uint32_t)slot->t : 0;
   const uint32_t *src = (const uint32_t *)sp;
   uint32_t *dst = rec + CRASH_DUMP_THREAD_OFF_SNAPSHOT / 4;
   for (uint32_t i = 0; i < snap / 4; i++)
@@ -268,6 +402,10 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
   uint32_t n_slots = CollectThreadSlots(sp_base, &current_index);
   uint32_t total = n_slots + ((current_index < 0) ? 1 : 0);
 
+  // Freeze the wait state (state/queue/mutex/link + SYS block) before the
+  // first card write perturbs it.
+  CapturePreLockState(n_slots);
+
   int lock_id = GetEepromLockId();
   Card_LockBackup(lock_id);
   // Clear the complete flag first: an interrupted write of this record must
@@ -284,7 +422,10 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
   // Record 0 is always the current thread; the hook regs hold its live state.
   struct crash_thread_slot *current_slot =
       (current_index >= 0) ? &crash_thread_slots[current_index] : NULL;
-  uint32_t size = StageThreadRecord(offset, &records_left, current_slot, sp_base,
+  const struct crash_thread_view *current_view =
+      (current_index >= 0) ? &crash_prelock_views[current_index] : NULL;
+  uint32_t size = StageThreadRecord(offset, &records_left, current_slot, current_view,
+                                    &regs[CRASH_DUMP_REG_R0], sp_base,
                                     regs[CRASH_DUMP_REG_PC], regs[CRASH_DUMP_REG_LR],
                                     true, &rec_offset);
   if (size != 0)
@@ -307,7 +448,8 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
     uint32_t pc = ((uint32_t)slot->t->context.function_address_plus_4) - 4;
     uint32_t lr = (uint32_t)slot->t->context.exit_function;
     uint32_t sp = (uint32_t)slot->t->context.usable_stack_pointer;
-    size = StageThreadRecord(offset, &records_left, slot, sp, pc, lr, false, &rec_offset);
+    size = StageThreadRecord(offset, &records_left, slot, &crash_prelock_views[i],
+                             slot->t->context.registers, sp, pc, lr, false, &rec_offset);
     if (size == 0)
     {
       break;
@@ -381,11 +523,11 @@ void CrashDumpTrigger(void)
                 (uint32_t)raw_buttons[0] | ((uint32_t)raw_buttons[1] << 8));
 }
 
-// Watchdog: polls every frame (it sleeps on NULL and is woken from the VCount
-// 0 routine like the other mod threads) and dumps all thread stacks when the
-// combo is held. This turns hangs (infinite loops, deadlocks) that never
-// reach FatalError/OS_Panic into a diagnosable record. The game is left
-// running afterwards; crash_dump_active makes the combo fire only once.
+// Watchdog: polls every frame (it sleeps on the mod wake queue and is woken
+// from the VCount 0 hook like the other mod threads) and dumps all thread
+// stacks when the combo is held. This turns hangs (infinite loops, deadlocks)
+// that never reach FatalError/OS_Panic into a diagnosable record. The game is
+// left running afterwards; crash_dump_active makes the combo fire only once.
 void CrashDumpWatchdogRoutine(void *arg)
 {
   while (true)
@@ -397,6 +539,6 @@ void CrashDumpWatchdogRoutine(void *arg)
       CrashDumpTrigger();
       OS_ResetSystem(1);
     }
-    OS_SleepThread(NULL);
+    OS_SleepThread(&mod_wake_queue);
   }
 }

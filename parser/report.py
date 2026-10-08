@@ -12,7 +12,9 @@ from .dump import (
     CrashDump,
     HOOK_FATAL_ERROR,
     HOOK_OS_PANIC,
+    QueueAnalysis,
     ThreadRecord,
+    analyze_thread_queues,
     decode_buttons,
 )
 from .symtab import Resolution, SymbolTable
@@ -129,6 +131,27 @@ def describe_thread_line(table: Optional[SymbolTable], record: ThreadRecord) -> 
                              describe_address(table, record.pc & ~1))
 
 
+def describe_wait_line(record: ThreadRecord) -> str:
+    """One line of OS wait-queue linkage for a thread record."""
+    parts = ["queue %s" % _addr(record.queue)]
+    if record.mutex:
+        parts.append("mutex %s" % _addr(record.mutex))
+    parts.append("link <- %s -> %s" % (_addr(record.link_prev),
+                                       _addr(record.link_next)))
+    return "    %s" % "  ".join(parts)
+
+
+def describe_regs_line(record: ThreadRecord) -> str:
+    """Registers r0-r12 of a thread record, two per line."""
+    lines: List[str] = []
+    regs = record.regs
+    for i in range(0, len(regs), 2):
+        chunk = "  ".join("r%-2d %s" % (i + j, _addr(regs[i + j]))
+                          for j in range(min(2, len(regs) - i)))
+        lines.append("    %s" % chunk)
+    return "\n".join(lines)
+
+
 def render_text(dump: CrashDump, table: Optional[SymbolTable],
                 frames: List[Frame], trace_truncated: bool,
                 rom_info: Optional[Dict], ctx: ReportContext,
@@ -190,6 +213,26 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
         push("  r%-2d  %s%s" % (i, _addr(value), annotation))
 
     push("")
+    push("Mod / uplink state (captured before the dump's own card writes)")
+    sys = dump.sys
+    push("  uplink busy timeouts %d, lock skips %d, lock waits >=2ms %d"
+         % (sys.uplink_card_busy_timeouts, sys.uplink_card_lock_skips,
+            sys.uplink_card_lock_waits))
+    push("  mod wake count       %d (VCount 0 hook wakeups)" % sys.mod_wake_count)
+    flags = sys.frame_flags
+    if flags is None:
+        push("  frame flags          (unavailable)")
+    else:
+        push("  frame flags          [0]=%d [7]=%d [9]=%d [10]=%d"
+             % (flags["flag0"], flags["flag7"], flags["flag9"], flags["flag10"]))
+    if sys.queue_samples:
+        for s in sys.queue_samples:
+            push("  queue %s  head %s  tail %s"
+                 % (_addr(s.queue), _addr(s.head), _addr(s.tail)))
+    else:
+        push("  queue samples        (none)")
+
+    push("")
     push("Backtrace (best-effort; candidate return addresses from the stack snapshot)")
     if frames:
         for line in _frame_lines(table, frames):
@@ -198,6 +241,12 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
             push("  (frame cap reached; increase --max-frames to scan further)")
     else:
         push("  (no code addresses found)")
+
+    crashing_record = dump.crashing_record
+    if crashing_record is not None:
+        push("")
+        push("Crashing thread wait state")
+        push("  %s" % describe_wait_line(crashing_record).strip())
 
     others = [(rec, tf, tt) for rec, tf, tt in (thread_traces or [])
               if rec.index != dump.crashing_index]
@@ -213,7 +262,10 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
             push("    sp %s  stack %s..%s, snapshot %s bytes%s"
                  % (_addr(record.sp), _addr(record.stack_start), _addr(record.stack_end),
                     hex(record.snapshot_bytes),
-                    "" if record.sp_valid else "  [sp outside the stack bounds]"))
+                    "" if record.sp_valid else
+                    ("  [sp outside the stack bounds; snapshot captured from sp]"
+                     if record.sp_outside else "  [sp outside the stack bounds]")))
+            push(describe_wait_line(record))
             if thread_frames:
                 for line in _frame_lines(table, thread_frames, indent="    "):
                     push(line)
@@ -221,6 +273,17 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
                     push("    (frame cap reached; increase --max-frames to scan further)")
             else:
                 push("    (no code addresses found)")
+            push("    registers")
+            push(describe_regs_line(record))
+
+    analysis = analyze_thread_queues(dump)
+    push("")
+    push("Wait-queue analysis")
+    if analysis.clean:
+        push("  no queue corruption detected")
+    else:
+        for finding in analysis.findings:
+            push("  [%s] %s" % (finding.kind, finding.detail))
 
     if rom_info is not None:
         push("")
@@ -277,6 +340,8 @@ def build_json(dump: CrashDump, table: Optional[SymbolTable],
                rom_info: Optional[Dict], ctx: ReportContext,
                thread_traces: Optional[List[Tuple[ThreadRecord, List[Frame], bool]]] = None,
                ) -> Dict:
+    queue_analysis: QueueAnalysis = analyze_thread_queues(dump)
+
     def candidates_for(addr: int) -> List[Dict]:
         if table is None:
             return []
@@ -321,6 +386,17 @@ def build_json(dump: CrashDump, table: Optional[SymbolTable],
             "held": decode_buttons(dump.trigger_buttons),
         },
         "complete": dump.complete,
+        "sys": {
+            "uplink_card_busy_timeouts": dump.sys.uplink_card_busy_timeouts,
+            "uplink_card_lock_skips": dump.sys.uplink_card_lock_skips,
+            "uplink_card_lock_waits": dump.sys.uplink_card_lock_waits,
+            "mod_wake_count": dump.sys.mod_wake_count,
+            "frame_flags": dump.sys.frame_flags,
+            "queue_samples": [
+                {"queue": s.queue, "head": s.head, "tail": s.tail}
+                for s in dump.sys.queue_samples
+            ],
+        },
         "backtrace": [
             {
                 "index": frame.index,
@@ -352,6 +428,13 @@ def build_json(dump: CrashDump, table: Optional[SymbolTable],
                 "snapshot_bytes": record.snapshot_bytes,
                 "is_current": record.is_current,
                 "sp_valid": record.sp_valid,
+                "sp_outside": record.sp_outside,
+                "registers": {"r%d" % i: value for i, value in enumerate(record.regs)},
+                "queue": record.queue,
+                "mutex": record.mutex,
+                "link_prev": record.link_prev,
+                "link_next": record.link_next,
+                "thread_ptr": record.thread_ptr,
                 "backtrace": [
                     {
                         "index": frame.index,
@@ -369,6 +452,17 @@ def build_json(dump: CrashDump, table: Optional[SymbolTable],
             }
             for record, thread_frames, thread_truncated in (thread_traces or [])
         ],
+        "queue_analysis": {
+            "clean": queue_analysis.clean,
+            "findings": [
+                {"kind": f.kind, "detail": f.detail, "thread_ptrs": f.thread_ptrs}
+                for f in queue_analysis.findings
+            ],
+            "chains": {
+                "0x%08X" % q: ["0x%08X" % node for node in chain]
+                for q, chain in queue_analysis.chains.items()
+            },
+        },
         "warnings": list(ctx.warnings),
     }
     if rom_info is not None:

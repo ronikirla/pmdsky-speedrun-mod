@@ -8,17 +8,21 @@
 // record on the L+R+X+Y button combo, for hangs that never reach a hook.
 // The record is left untouched on clean runs (all 0xFF).
 //
-// Since version 3 the record covers *every* thread: a fixed 0x100 header
-// describing the current (crashing/triggering) thread, followed by packed
-// variable-length thread records walked from THREAD_INFO_STRUCT's thread
-// list. The FatalError format string (the "official" crash message) is still
-// kept in the header.
+// Since version 4 the record covers *every* thread: a fixed 0x100 header
+// describing the current (crashing/triggering) thread and the system state,
+// followed by packed variable-length thread records walked from
+// THREAD_INFO_STRUCT's thread list. The FatalError format string (the
+// "official" crash message) is still kept in the header. Version 4 adds, per
+// thread, the saved registers and the OS wait-queue linkage (queue/mutex/
+// link.prev/link.next/thread struct pointer) captured BEFORE the dump's own
+// card writes - that is the evidence needed to diagnose queue corruption
+// (lost waiters, spliced queues) of the kind the wake-queue rework fixes.
 //
 // Record layout at CRASH_DUMP_EEPROM_BASE (all little-endian):
 //
 // Header (0x100 bytes):
 //   0x000  u32  magic       ('CRSH')
-//   0x004  u32  version     (3)
+//   0x004  u32  version     (4)
 //   0x008  u32  hook_id     (CRASH_DUMP_HOOK_*)
 //   0x00C  u32  tick_lo     (OS_GetTickLo)
 //   0x010  u32  pc          (current thread: hooked instruction / trigger site)
@@ -36,8 +40,21 @@
 //   0x074  u32  crashing_index   (index of the current thread's record; 0)
 //   0x078  u32  trigger_buttons (raw held_buttons bitfield for the manual
 //                                trigger, 0 for the hooks)
-//   0x07C  char msg[0x80]   (FatalError format string, NUL-terminated, at most
-//                            CRASH_DUMP_MSG_MAX bytes; empty otherwise)
+//   0x07C  char msg[0x40]   (FatalError format string, NUL-terminated, at most
+//                            CRASH_DUMP_MSG_MAX = 0x3F bytes; empty otherwise)
+//   0x0BC  SYS block (16 words, captured before Card_LockBackup):
+//   0x0BC  u32  sys_busy_timeouts (uplink_card_busy_timeouts)
+//   0x0C0  u32  sys_lock_skips    (uplink_card_lock_skips)
+//   0x0C4  u32  sys_lock_waits    (uplink_card_lock_waits)
+//   0x0C8  u32  sys_wake_count    (mod_wake_count: VCount 0 hook liveliness)
+//   0x0CC  u32  sys_frame_flags   (DAT_02003aac[0],[7],[9],[10] as bytes
+//                                  0..3; 0xFFFFFFFF when unavailable)
+//   0x0D0  u32  sys_queue0_ptr, sys_queue0_head, sys_queue0_tail
+//   0x0DC  u32  sys_queue1_ptr, sys_queue1_head, sys_queue1_tail
+//   0x0E8  u32  sys_queue2_ptr, sys_queue2_head, sys_queue2_tail
+//                    (up to 3 distinct thread::queue pointers across the
+//                     dumped threads, validated before deref; 0 when unused)
+//   0x0F4  u32  sys_reserved0, sys_reserved1
 //   0x0FC  u32  complete    (0 while writing; the very last EEPROM write sets
 //                            1 - a 0 means the dump was interrupted)
 //
@@ -54,7 +71,16 @@
 //   +0x20  u32  state        (enum os_thread_state; 0xFFFFFFFF when unknown)
 //   +0x24  u32  snapshot_bytes (multiple of 4; the snapshot follows)
 //   +0x28  u32  flags        (CRASH_DUMP_THREAD_FLAG_*)
-//   +0x2C  u8   snapshot[snapshot_bytes]  (stack words from sp upward)
+//   +0x2C  u32  r0..r12      (13 words, 0x2C..0x5F: hook regs for record 0,
+//                            os_context::registers for the others)
+//   +0x60  u32  queue        (thread::queue - wait queue this thread is
+//                            sleeping on, 0 for NULL-queue sleeps)
+//   +0x64  u32  mutex        (thread::mutex, 0 when none)
+//   +0x68  u32  link_prev    (thread::link.prev - queue chain, 0 when none)
+//   +0x6C  u32  link_next    (thread::link.next - queue chain, 0 when none)
+//   +0x70  u32  thread_ptr   (address of the thread's struct thread; the key
+//                            the parser uses to walk queue chains)
+//   +0x74  u8   snapshot[snapshot_bytes]  (stack words from sp upward)
 //
 // Thread record 0 is always the current thread (the crashing thread, or the
 // watchdog for a manual trigger); the other records follow the game's thread
@@ -69,21 +95,29 @@
 #define CRASH_DUMP_EEPROM_BASE 0xb6b0
 #define CRASH_DUMP_SIZE 0x1000
 #define CRASH_DUMP_MAGIC 0x48535243 // 'CRSH'
-#define CRASH_DUMP_VERSION 3
+#define CRASH_DUMP_VERSION 4
 
 #define CRASH_DUMP_HOOK_FATAL_ERROR 1
 #define CRASH_DUMP_HOOK_OS_PANIC 2
 #define CRASH_DUMP_HOOK_MANUAL 3
 
 #define CRASH_DUMP_HEADER_SIZE 0x100
-// Max message bytes copied (excluding the NUL, which always fits).
-#define CRASH_DUMP_MSG_MAX 0x7F
+// Max message bytes copied (excluding the NUL, which always fits in the
+// 0x40-byte field).
+#define CRASH_DUMP_MSG_MAX 0x3F
 #define CRASH_DUMP_WRITE_CHUNK_SIZE 0x100
+// The game has at most 16 threads; walking more than this many list entries
+// means the list is corrupt and ends the walk.
+#define CRASH_DUMP_MAX_THREADS 16
 // The record is staged in RAM one piece at a time (a crash handler must not
 // hold 0x1000 bytes of stack), so each thread's snapshot is capped at the
-// staging buffer size minus the record header.
-#define CRASH_DUMP_RECORD_BUFFER_SIZE 0x400
+// staging buffer size minus the record header. The whole mod (code + data +
+// BSS) shares one 0x8010 linker region, so this buffer is deliberately small:
+// the per-thread snapshot at 16 threads (the common case) is bounded by the
+// fair-share math in StageThreadRecord (~0x7C) well below this cap anyway.
+#define CRASH_DUMP_RECORD_BUFFER_SIZE 0x150
 #define CRASH_DUMP_MAX_SNAPSHOT_BYTES (CRASH_DUMP_RECORD_BUFFER_SIZE - CRASH_DUMP_THREAD_RECORD_HEADER_SIZE)
+
 
 #define CRASH_DUMP_OFF_MAGIC 0x000
 #define CRASH_DUMP_OFF_VERSION 0x004
@@ -104,11 +138,21 @@
 #define CRASH_DUMP_OFF_THREADS_WRITTEN 0x070
 #define CRASH_DUMP_OFF_CRASHING_INDEX 0x074
 #define CRASH_DUMP_OFF_TRIGGER_BUTTONS 0x078
-#define CRASH_DUMP_OFF_MSG 0x07C // msg at 0x07C..0x0FB
+#define CRASH_DUMP_OFF_MSG 0x07C // msg at 0x07C..0x0BB (0x40 bytes)
+// SYS block: system state captured before Card_LockBackup (16 words,
+// 0x0BC..0x0FB).
+#define CRASH_DUMP_OFF_SYS_BUSY_TIMEOUTS 0x0BC
+#define CRASH_DUMP_OFF_SYS_LOCK_SKIPS 0x0C0
+#define CRASH_DUMP_OFF_SYS_LOCK_WAITS 0x0C4
+#define CRASH_DUMP_OFF_SYS_WAKE_COUNT 0x0C8
+#define CRASH_DUMP_OFF_SYS_FRAME_FLAGS 0x0CC
+#define CRASH_DUMP_OFF_SYS_QUEUE_SAMPLES 0x0D0 // 3 x {ptr, head, tail}
+#define CRASH_DUMP_SYS_QUEUE_SAMPLES 3
+#define CRASH_DUMP_OFF_SYS_RESERVED 0x0F4 // 2 words
 #define CRASH_DUMP_OFF_COMPLETE 0x0FC
 
 #define CRASH_DUMP_THREAD_RECORD_MAGIC 0x44524854 // 'THRD'
-#define CRASH_DUMP_THREAD_RECORD_HEADER_SIZE 0x2C
+#define CRASH_DUMP_THREAD_RECORD_HEADER_SIZE 0x74
 
 #define CRASH_DUMP_THREAD_OFF_MAGIC 0x00
 #define CRASH_DUMP_THREAD_OFF_THREAD_ID 0x04
@@ -121,12 +165,22 @@
 #define CRASH_DUMP_THREAD_OFF_STATE 0x20
 #define CRASH_DUMP_THREAD_OFF_SNAPSHOT_BYTES 0x24
 #define CRASH_DUMP_THREAD_OFF_FLAGS 0x28
-#define CRASH_DUMP_THREAD_OFF_SNAPSHOT 0x2C
+#define CRASH_DUMP_THREAD_OFF_REGS 0x2C // r0..r12 at 0x2C..0x5F
+#define CRASH_DUMP_THREAD_OFF_QUEUE 0x60
+#define CRASH_DUMP_THREAD_OFF_MUTEX 0x64
+#define CRASH_DUMP_THREAD_OFF_LINK_PREV 0x68
+#define CRASH_DUMP_THREAD_OFF_LINK_NEXT 0x6C
+#define CRASH_DUMP_THREAD_OFF_THREAD_PTR 0x70
+#define CRASH_DUMP_THREAD_OFF_SNAPSHOT 0x74
 
 // The snapshot starts at a sp that is inside the thread's stack bounds.
 #define CRASH_DUMP_THREAD_FLAG_SP_VALID 1
 // This record is the current thread (record 0).
 #define CRASH_DUMP_THREAD_FLAG_CURRENT 2
+// The sp was outside the recorded stack bounds (or no struct thread matched
+// it) but the snapshot was still captured upward from sp - see
+// StageThreadRecord.
+#define CRASH_DUMP_THREAD_FLAG_SP_OUTSIDE 4
 
 // Layout of the regs array passed in from the hook stubs:
 //   regs[0] = pc, regs[1] = lr, regs[2] = sp, regs[3] = cpsr,
