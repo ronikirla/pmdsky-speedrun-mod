@@ -31,3 +31,12 @@ void SaveConfigurations(void);
 void LoadIGTAndConfigurations(void);
 void SaveRNGSeedForSoftReset(void);
 int GetEepromLockId(void);
+// Serialized backup-section lock (implementation in src/eeprom.c).
+// EepromLock()/EepromUnlock() wrap each Card_LockBackup..Card_UnlockBackup
+// section; EepromLock returns false when no valid CARD lock id exists and the
+// caller must skip its writes. Nesting on one thread is allowed (needed by
+// LoadIGTAndConfigurations -> SaveIGT/SaveConfigurations). EepromTryLock is
+// the bounded-wait variant for the crash dump (never blocks past the timeout).
+bool EepromLock(void);
+void EepromUnlock(void);
+bool EepromTryLock(uint32_t timeout_ms);

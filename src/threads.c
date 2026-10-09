@@ -32,7 +32,10 @@ struct thread vblank_routine_thread;
 struct thread main_routine_thread;
 
 uint64_t watchdog_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
-uint64_t vblank_routine_thread_stack[STACK_SIZE_2KB / sizeof(uint64_t)];
+// 1KB is enough for the vblank routine: its whole call graph (CalculateFPS /
+// UpdateAPSIdleTime) uses only small HUD_LEN char buffers plus static arrays.
+// The 2KB saved here keeps the code+data+bss region within its linker length.
+uint64_t vblank_routine_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
 uint64_t main_routine_thread_stack[STACK_SIZE_4KB / sizeof(uint64_t)];
 
 // Dedicated wake queue for the mod's threads. The VCount 0 hook wakes the
@@ -54,8 +57,8 @@ __attribute__((used)) void InitThreads(void)
                   watchdog_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
                   STACK_SIZE_1KB, WATCHDOG_THREAD_PRIO);
   OS_CreateThread(&vblank_routine_thread, VCount0Routine, NULL,
-                  vblank_routine_thread_stack + STACK_SIZE_2KB / sizeof(uint64_t),
-                  STACK_SIZE_2KB, VBLANK_ROUTINE_THREAD_PRIO);
+                  vblank_routine_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
+                  STACK_SIZE_1KB, VBLANK_ROUTINE_THREAD_PRIO);
   OS_CreateThread(&main_routine_thread, MainRoutine, NULL,
                   main_routine_thread_stack + STACK_SIZE_4KB / sizeof(uint64_t),
                   STACK_SIZE_4KB, MAIN_ROUTINE_THREAD_PRIO);
@@ -99,8 +102,17 @@ void MainRoutine(void *)
 {
   while (true)
   {
-    // will only init if it isn't elready and if certain overlays are loaded
-    UplinkInit();
+    // Skip all USB uplink traffic while overlay 30 (quicksave) is loaded:
+    // the game is doing a burst of EEPROM writes then, and mod card
+    // transactions must stay out of that window (occasional eeprom
+    // corruption after a quicksave). UplinkInit/UplinkPoll are the only USB
+    // senders in the mod, so gating them gates all USB data.
+    bool quicksave_active = OverlayIsLoaded(OGROUP_OVERLAY_30);
+    if (!quicksave_active)
+    {
+      // will only init if it isn't elready and if certain overlays are loaded
+      UplinkInit();
+    }
     HandleSoftReset();
     HandleHUDToggle();
     HandleSpeedToggle();
@@ -112,9 +124,12 @@ void MainRoutine(void *)
     UpdateInputDisplay();
     UpdateHUDSlots();
     SaveIGT(true);
-    //  Stream the memory samples over USB (runs only while the mod thread
-    //  would otherwise be idle; pauses while the game holds the card lock)
-    UplinkPoll();
+    if (!quicksave_active)
+    {
+      //  Stream the memory samples over USB (runs only while the mod thread
+      //  would otherwise be idle; pauses while the game holds the card lock)
+      UplinkPoll();
+    }
     OS_SleepThread(&mod_wake_queue);
   }
 }

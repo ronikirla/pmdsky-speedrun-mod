@@ -63,11 +63,13 @@ void ResetRngSeed() {
   fixed_rng_state.scenario_prev = scenario;
   fixed_rng_state.level_prev = level;
 
-  // Save to EEPROM whenever the state changes
-  int lock_id = GetEepromLockId();
-  Card_LockBackup(lock_id);
-  Card_WriteAndVerifyEeprom(EEPROM_RNG_STATE_BASE_ADDRESS, &fixed_rng_state, sizeof(fixed_rng_state));
-  Card_UnlockBackup(lock_id);
+  // Save to EEPROM whenever the state changes. On a lock failure only the
+  // write is skipped - the reseed below must always run (behavior change to
+  // ResetRngSeed is off-limits).
+  if (EepromLock()) {
+    Card_WriteAndVerifyEeprom(EEPROM_RNG_STATE_BASE_ADDRESS, &fixed_rng_state, sizeof(fixed_rng_state));
+    EepromUnlock();
+  }
 
   uint16_t seed = base_rng_seed ^ scenario ^ (level << 5) ^ (fixed_rng_state.calls_per_scenario << 12);
   //Debug_Print0("seed: %x\n", seed);

@@ -47,6 +47,13 @@ void OS_SleepThread(struct os_thread_queue *queue);
 void OS_SetThreadPriority(struct thread *thread, uint32_t prio);
 uint32_t OS_GetThreadPriority(struct thread *thread);
 void OS_Sleep(uint32_t msec);
+// Mutex ops (NitroSDK os_mutex.c): OS_LockMutex is per-thread reentrant (the
+// owner re-locking just bumps os_mutex::count) and OS_UnlockMutex is a no-op
+// unless the caller owns the mutex. OS_TryLockMutex returns nonzero when the
+// lock was acquired. pmdsky.h only declares OS_InitMutex.
+void OS_LockMutex(struct os_mutex *mutex);
+void OS_UnlockMutex(struct os_mutex *mutex);
+uint32_t OS_TryLockMutex(struct os_mutex *mutex);
 
 // Mod thread wake queue and wake counter (defined in src/threads.c). All mod
 // threads sleep on this queue at their frame-wait points; the VCount 0 hook

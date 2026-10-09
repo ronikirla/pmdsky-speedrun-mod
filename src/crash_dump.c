@@ -36,6 +36,11 @@ struct crash_thread_slot
 // anything below 0x03000000 is a plausible address.
 #define CRASH_DUMP_MAIN_RAM_END 0x03000000
 
+// Bounded wait (ms) for the mod's backup section in CrashDumpEmit, see
+// EepromTryLock. Keep it short: the dump exists to be written while things
+// are already broken.
+#define CRASH_DUMP_LOCK_WAIT_MS 100
+
 // Per-thread wait-state fields, sampled BEFORE Card_LockBackup: the dump's
 // own card writes park threads on the very lock/busy queues being diagnosed
 // (and a running game keeps scheduling), so the queue linkage must be frozen
@@ -406,8 +411,16 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
   // first card write perturbs it.
   CapturePreLockState(n_slots);
 
-  int lock_id = GetEepromLockId();
-  Card_LockBackup(lock_id);
+  // Bounded-wait section entry: the dump must never block behind a wedged
+  // mod section (that is exactly when the dump is needed), so give up the
+  // mutex after the timeout and proceed without it - the shared CARD id
+  // still re-enters the lock (see EepromTryLock), which is safe here because
+  // the hook path halts the game regardless. No valid CARD lock id at all
+  // (OS_GetLockID exhausted) means the dump cannot be written safely - skip
+  // it rather than corrupt EEPROM mid-write.
+  if (!EepromTryLock(CRASH_DUMP_LOCK_WAIT_MS)) {
+    return;
+  }
   // Clear the complete flag first: an interrupted write of this record must
   // not be mistaken for a complete one (a previous dump may have left a 1).
   uint32_t flag = 0;
@@ -461,7 +474,7 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
   // The record is only complete once this lands.
   flag = 1;
   Card_WriteAndVerifyEeprom(CRASH_DUMP_EEPROM_BASE + CRASH_DUMP_OFF_COMPLETE, &flag, 4);
-  Card_UnlockBackup(lock_id);
+  EepromUnlock();
 }
 
 void CrashDumpWrite(uint32_t hook_id, const uint32_t *regs, uint32_t sp_base)

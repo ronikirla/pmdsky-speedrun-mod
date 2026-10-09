@@ -35,6 +35,16 @@
     // we are safe to run our code
     .org 0x02094850
         stmdb sp!,{r0-r12,lr}
+        // Preserve the CPSR: the hooked instruction at 0x02003764
+        // (add r2, r2, 1) is flag-neutral, and the handler resumes at
+        // 0x02003768 with whatever flags the code before the hook site left
+        // there. The hook body clobbers them (cmp / bl WakeupThreads), which
+        // would make the handler misbranch at random. Save the full CPSR in
+        // scratch r0 (already stacked) and restore ONLY the flags field on
+        // exit - the control bits (mode / I / F / T) must stay untouched
+        // because we run in IRQ handler context.
+        mrs r0, cpsr
+        stmdb sp!,{r0}
         ldr r1, [@delay]
         cmp r1, 0
         bne @delay_not_done
@@ -52,6 +62,8 @@
         bleq InitThreads
 
     @exit:
+        ldmia sp!,{r0}
+        msr cpsr_f, r0 // Restore the flags saved on entry
         ldmia sp!,{r0-r12,lr}
         add r2, r2, 1 // Run original instruction from the trampoline
         b @vcount0
