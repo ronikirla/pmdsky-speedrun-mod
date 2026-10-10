@@ -123,7 +123,33 @@ void MainRoutine(void *)
     UpdateAPS();
     UpdateInputDisplay();
     UpdateHUDSlots();
-    SaveIGT(true);
+
+    // int lock_id = OS_GetLockID();
+    // Card_LockRom(lock_id);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // OS_SpinWait(2000000);
+    // Card_UnlockRom(lock_id);
+    // OS_ReleaseLockId(lock_id);
+
+    // SaveIGT(true);
     if (!quicksave_active)
     {
       //  Stream the memory samples over USB (runs only while the mod thread

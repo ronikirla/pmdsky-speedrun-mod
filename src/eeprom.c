@@ -42,10 +42,13 @@ static struct os_mutex eeprom_mutex;
 // collides with CARDi's "lock free" sentinel - Card_LockBackup(-3) would be
 // treated as a reentrant entry on a free lock and Card_UnlockBackup would hit
 // the "not locking" panic path. Valid ARM9 ids are 0x40..0x6F.
-int GetEepromLockId(void) {
-  if (eeprom_lock_id == -3) {
+int GetEepromLockId(void)
+{
+  if (eeprom_lock_id == -3)
+  {
     int id = OS_GetLockID();
-    if (id >= 0x40 && id <= 0x6F) {
+    if (id >= 0x40 && id <= 0x6F)
+    {
       eeprom_lock_id = id;
     }
   }
@@ -54,9 +57,11 @@ int GetEepromLockId(void) {
 
 // Enter/leave a serialized backup section (see eeprom_mutex above). Pair
 // every successful EepromLock with exactly one EepromUnlock.
-bool EepromLock(void) {
+bool EepromLock(void)
+{
   OS_LockMutex(&eeprom_mutex);
-  if (GetEepromLockId() < 0) {
+  if (GetEepromLockId() < 0)
+  {
     OS_UnlockMutex(&eeprom_mutex);
     return false;
   }
@@ -64,7 +69,8 @@ bool EepromLock(void) {
   return true;
 }
 
-void EepromUnlock(void) {
+void EepromUnlock(void)
+{
   Card_UnlockBackup(eeprom_lock_id);
   OS_UnlockMutex(&eeprom_mutex);
 }
@@ -76,16 +82,21 @@ void EepromUnlock(void) {
 // (caller must then skip its writes). If the wait timed out we proceed
 // WITHOUT the section mutex (best-effort exclusion); EepromUnlock is still
 // correct then, because OS_UnlockMutex is owner-checked.
-bool EepromTryLock(uint32_t timeout_ms) {
-  if (!OS_TryLockMutex(&eeprom_mutex)) {
-    for (uint32_t waited = 0; waited < timeout_ms; waited++) {
+bool EepromTryLock(uint32_t timeout_ms)
+{
+  if (!OS_TryLockMutex(&eeprom_mutex))
+  {
+    for (uint32_t waited = 0; waited < timeout_ms; waited++)
+    {
       OS_Sleep(1);
-      if (OS_TryLockMutex(&eeprom_mutex)) {
+      if (OS_TryLockMutex(&eeprom_mutex))
+      {
         break;
       }
     }
   }
-  if (GetEepromLockId() < 0) {
+  if (GetEepromLockId() < 0)
+  {
     OS_UnlockMutex(&eeprom_mutex);
     return false;
   }
@@ -93,20 +104,25 @@ bool EepromTryLock(uint32_t timeout_ms) {
   return true;
 }
 
-void SaveIGT(bool o30_check) {
-  if (!igt_loaded || (o30_check && OverlayIsLoaded(OGROUP_OVERLAY_30))) {
+void SaveIGT(bool o30_check)
+{
+  if (!igt_loaded || (o30_check && OverlayIsLoaded(OGROUP_OVERLAY_30)))
+  {
     return;
   }
-  if (!EepromLock()) {
+  if (!EepromLock())
+  {
     return;
   }
   int eeprom_offset = 0x0;
   int new_index = 0;
-  if (eeprom_timer.index == 0) {
+  if (eeprom_timer.index == 0)
+  {
     new_index = 1;
     eeprom_offset = 0x6;
   }
-  else {
+  else
+  {
     new_index = 0;
     eeprom_offset = 0x1;
   }
@@ -122,19 +138,23 @@ void SaveIGT(bool o30_check) {
   EepromUnlock();
 }
 
-void SaveRNGSeedForSoftReset(void) {
+void SaveRNGSeedForSoftReset(void)
+{
   char rng_seed_save[RNG_INPUT_LEN + 1];
   memcpy(rng_seed_save, base_rng_text, RNG_INPUT_LEN + 1);
 
-  if (!EepromLock()) {
+  if (!EepromLock())
+  {
     return;
   }
   Card_WriteAndVerifyEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, rng_seed_save, RNG_INPUT_LEN + 1);
   EepromUnlock();
 }
 
-void SaveConfigurations(void) {
-  if (!EepromLock()) {
+void SaveConfigurations(void)
+{
+  if (!EepromLock())
+  {
     return;
   }
   eeprom_configurations.SRAM_hud_display_mode = hud_display_mode;
@@ -147,21 +167,26 @@ void SaveConfigurations(void) {
   EepromUnlock();
 }
 
-void LoadIGTAndConfigurations(void) {
-  if (!EepromLock()) {
+void LoadIGTAndConfigurations(void)
+{
+  if (!EepromLock())
+  {
     return;
   }
   uint8_t magic;
   Card_ReadEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
-  if (magic != EEPROM_MAGIC) {
+  if (magic != EEPROM_MAGIC)
+  {
     // One-time migration from the pre-v5 magic address: a save written by an
     // older build has the marker at 0xc7f0 - keep its config/IGT and just
     // write the marker to the new location instead of re-initializing.
     Card_ReadEeprom(EEPROM_MAGIC_OLD_ADDRESS, &magic, sizeof(uint8_t));
-    if (magic == EEPROM_MAGIC) {
+    if (magic == EEPROM_MAGIC)
+    {
       Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
     }
-    else {
+    else
+    {
       SaveIGT(true);
       SaveConfigurations();
       magic = EEPROM_MAGIC;
@@ -176,35 +201,42 @@ void LoadIGTAndConfigurations(void) {
   // Read Configurations
   Card_ReadEeprom(EEPROM_CONFIGURATIONS_BASE_ADDRESS, &eeprom_configurations, sizeof(eeprom_configurations));
 
-  if (eeprom_configurations.SRAM_hud_display_mode < 0 || eeprom_configurations.SRAM_hud_display_mode >= HUD_DISPLAY_COUNT) {
+  if (eeprom_configurations.SRAM_hud_display_mode < 0 || eeprom_configurations.SRAM_hud_display_mode >= HUD_DISPLAY_COUNT)
+  {
     eeprom_configurations.SRAM_hud_display_mode = HUD_DISPLAY_NONE;
   }
-  if (eeprom_configurations.SRAM_optimization_mode < 0 || eeprom_configurations.SRAM_optimization_mode >= OPTIMIZATION_MODE_COUNT) {
+  if (eeprom_configurations.SRAM_optimization_mode < 0 || eeprom_configurations.SRAM_optimization_mode >= OPTIMIZATION_MODE_COUNT)
+  {
     eeprom_configurations.SRAM_optimization_mode = OPTIMIZATION_MODE_DEFAULT;
   }
   hud_display_mode = eeprom_configurations.SRAM_hud_display_mode;
   optimization_mode = eeprom_configurations.SRAM_optimization_mode;
 
-  if (eeprom_configurations.SRAM_file_timer != 0xFF) {
+  if (eeprom_configurations.SRAM_file_timer != 0xFF)
+  {
     file_timer = eeprom_configurations.SRAM_file_timer;
     start_time = eeprom_configurations.SRAM_start_time;
   }
-  if (eeprom_configurations.SRAM_show_idle_seconds != 0xFF) {
+  if (eeprom_configurations.SRAM_show_idle_seconds != 0xFF)
+  {
     SetShowIdleSeconds(eeprom_configurations.SRAM_show_idle_seconds);
   }
-  
+
   // Load RNG seed from EEPROM and apply it, then clear from EEPROM (only survives soft reset)
   char rng_seed_loaded[RNG_INPUT_LEN + 1];
   Card_ReadEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, rng_seed_loaded, RNG_INPUT_LEN + 1);
   // Check if there's a valid seed saved (not all 0xFF which means unwritten EEPROM)
   bool has_rng_seed = false;
-  for (int i = 0; i < RNG_INPUT_LEN + 1; i++) {
-    if (rng_seed_loaded[i] != (char)0xFF) {
+  for (int i = 0; i < RNG_INPUT_LEN + 1; i++)
+  {
+    if (rng_seed_loaded[i] != (char)0xFF)
+    {
       has_rng_seed = true;
       break;
     }
   }
-  if (has_rng_seed) {
+  if (has_rng_seed)
+  {
     SetFixedRNGSeed(rng_seed_loaded);
   }
 
@@ -212,7 +244,8 @@ void LoadIGTAndConfigurations(void) {
   AssignHUDSlots();
 
   // Do not load the time if there is no time in the save data (aka deleted save)
-  if (PLAY_TIME_SECONDS == 0) {
+  if (PLAY_TIME_SECONDS == 0)
+  {
     goto CLEANUP;
   }
 
@@ -231,12 +264,13 @@ CLEANUP:
   char empty_seed[RNG_INPUT_LEN + 1];
   memset(empty_seed, 0xFF, RNG_INPUT_LEN + 1);
   Card_WriteAndVerifyEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, empty_seed, RNG_INPUT_LEN + 1);
-  
+
   EepromUnlock();
   igt_loaded = true;
 }
 
-__attribute__((used)) int HijackNoteLoadBaseAndLoadIGT(void) {
+__attribute__((used)) int HijackNoteLoadBaseAndLoadIGT(void)
+{
   igt_loaded = false;
   int res = NoteLoadBase();
   LoadIGTAndConfigurations();
