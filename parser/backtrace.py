@@ -127,7 +127,7 @@ def _scan_frames(pc: int, lr: int, sp_base: int, words: List[int], skip: int,
 
 
 def build_backtrace(dump: CrashDump, table: Optional[SymbolTable],
-                    max_frames: int = 32) -> Tuple[List[Frame], bool]:
+                    max_frames: int = 128) -> Tuple[List[Frame], bool]:
     """Reconstruct the current thread's backtrace (the crash/trigger site).
 
     Frame #0 is the crash site (``pc`` = the hooked FatalError/OS_Panic, or
@@ -141,7 +141,7 @@ def build_backtrace(dump: CrashDump, table: Optional[SymbolTable],
 
 
 def build_thread_backtrace(record: ThreadRecord, table: Optional[SymbolTable],
-                           max_frames: int = 32,
+                           max_frames: int = 128,
                            hook_id: Optional[int] = None) -> Tuple[List[Frame], bool]:
     """Reconstruct one thread's backtrace from its record.
 

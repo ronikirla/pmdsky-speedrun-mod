@@ -86,7 +86,7 @@ def make_record(hook_id: int = dump_mod.HOOK_FATAL_ERROR,
                 sys_wake_count: int = 1234,
                 sys_frame_flags: int = 0xFFFFFFFF,
                 sys_queue_samples=None) -> bytes:
-    """Build a synthetic 0x1000-byte crash dump record (format version 4).
+    """Build a synthetic 0x8000-byte crash dump record (format version 5).
 
     ``threads`` is a list of raw thread record bytes (see make_thread_record);
     by default one record is generated for the current thread, using

@@ -234,8 +234,8 @@ static void StageHeader(uint32_t hook_id, const uint32_t *regs,
   header[CRASH_DUMP_OFF_ARG2 / 4] = regs[CRASH_DUMP_REG_R0 + 2];
   header[CRASH_DUMP_OFF_ARG3 / 4] = regs[CRASH_DUMP_REG_R0 + 3];
   header[CRASH_DUMP_OFF_TRIGGER_BUTTONS / 4] = trigger_buttons;
-  // All records always fit (see StageThreadRecord), so the counts agree; the
-  // parser still cross-checks what it finds against these.
+  // All records always fit (see StageThreadRecordHeader), so the counts
+  // agree; the parser still cross-checks what it finds against these.
   header[CRASH_DUMP_OFF_THREAD_COUNT / 4] = total_threads;
   header[CRASH_DUMP_OFF_THREADS_WRITTEN / 4] = total_threads;
   header[CRASH_DUMP_OFF_CRASHING_INDEX / 4] = 0;
@@ -285,19 +285,24 @@ static void StageHeader(uint32_t hook_id, const uint32_t *regs,
   header[CRASH_DUMP_OFF_CHECKSUM / 4] = checksum;
 }
 
-// Stage one thread record into the staging buffer. The snapshot gets a fair
-// share of what is left of the record region (so all threads always fit),
-// clamped to the thread's used stack and the staging buffer size. The wait
-// state (state/queue/mutex/link) comes from the pre-lock capture; registers
-// come from regs13 (hook regs for the current thread, os_context for others).
-// Returns the staged byte count (0 when the region is full); *rec_offset gets
-// the offset inside the record where the caller must write it.
-static uint32_t StageThreadRecord(uint32_t offset, uint32_t *records_left,
-                                  struct crash_thread_slot *slot,
-                                  const struct crash_thread_view *view,
-                                  const uint32_t *regs13,
-                                  uint32_t sp, uint32_t pc, uint32_t lr,
-                                  bool is_current, uint32_t *rec_offset)
+// Stage one thread-record header into the staging buffer. The snapshot
+// length is fixed here (fair share of what is left of the record region,
+// clamped to the thread's used stack / the Main RAM end) but NOT copied: the
+// caller writes the staged header and then streams the snapshot with
+// StreamSnapshot, so a snapshot can be far longer than the staging buffer.
+// The wait state (state/queue/mutex/link) comes from the pre-lock capture;
+// registers come from regs13 (hook regs for the current thread, os_context
+// for others).
+// Returns the total record byte count (header + snapshot; 0 when the region
+// is full); *rec_offset gets the offset inside the record where the caller
+// must write it; *snapshot_bytes gets the snapshot length to stream.
+static uint32_t StageThreadRecordHeader(uint32_t offset, uint32_t *records_left,
+                                        struct crash_thread_slot *slot,
+                                        const struct crash_thread_view *view,
+                                        const uint32_t *regs13,
+                                        uint32_t sp, uint32_t pc, uint32_t lr,
+                                        bool is_current, uint32_t *rec_offset,
+                                        uint32_t *snapshot_bytes)
 {
   uint32_t remaining = CRASH_DUMP_SIZE - offset;
   if (*records_left == 0 || remaining < CRASH_DUMP_THREAD_RECORD_HEADER_SIZE)
@@ -308,10 +313,6 @@ static uint32_t StageThreadRecord(uint32_t offset, uint32_t *records_left,
   uint32_t max_snap = (share > CRASH_DUMP_THREAD_RECORD_HEADER_SIZE)
                           ? share - CRASH_DUMP_THREAD_RECORD_HEADER_SIZE
                           : 0;
-  if (max_snap > CRASH_DUMP_MAX_SNAPSHOT_BYTES)
-  {
-    max_snap = CRASH_DUMP_MAX_SNAPSHOT_BYTES;
-  }
   bool sp_valid = slot != NULL && SlotBoundsOk(slot) && sp >= slot->lo && sp < slot->hi;
   uint32_t snap = 0;
   uint32_t extra_flags = 0;
@@ -338,6 +339,7 @@ static uint32_t StageThreadRecord(uint32_t offset, uint32_t *records_left,
     extra_flags = CRASH_DUMP_THREAD_FLAG_SP_OUTSIDE;
   }
   snap &= ~3u;
+  *snapshot_bytes = snap;
 
   uint32_t *rec = crash_dump_record_buffer;
   rec[CRASH_DUMP_THREAD_OFF_MAGIC / 4] = CRASH_DUMP_THREAD_RECORD_MAGIC;
@@ -362,15 +364,39 @@ static uint32_t StageThreadRecord(uint32_t offset, uint32_t *records_left,
   rec[CRASH_DUMP_THREAD_OFF_LINK_PREV / 4] = view ? view->link_prev : 0;
   rec[CRASH_DUMP_THREAD_OFF_LINK_NEXT / 4] = view ? view->link_next : 0;
   rec[CRASH_DUMP_THREAD_OFF_THREAD_PTR / 4] = (slot && slot->t) ? (uint32_t)slot->t : 0;
-  const uint32_t *src = (const uint32_t *)sp;
-  uint32_t *dst = rec + CRASH_DUMP_THREAD_OFF_SNAPSHOT / 4;
-  for (uint32_t i = 0; i < snap / 4; i++)
-  {
-    dst[i] = src[i];
-  }
   (*records_left)--;
   *rec_offset = offset;
   return CRASH_DUMP_THREAD_RECORD_HEADER_SIZE + snap;
+}
+
+// Stream a thread's stack snapshot (snap bytes from the live stack at sp)
+// into the record at rec_offset, one staged chunk at a time: copy a chunk
+// into the staging buffer, hand it to the card driver, repeat. The card
+// driver copies the staged buffer page-by-page without yielding inside a
+// page copy (CARDi_RequestStreamCommandCore), so every chunk lands
+// consistent even though the source stack keeps living between chunks -
+// the same between-pieces consistency the old single-buffer staging had.
+static void StreamSnapshot(uint32_t rec_offset, uint32_t sp, uint32_t snap)
+{
+  const uint32_t *src = (const uint32_t *)sp;
+  uint32_t done = 0;
+  while (done < snap)
+  {
+    uint32_t n = snap - done;
+    if (n > CRASH_DUMP_WRITE_CHUNK_SIZE)
+    {
+      n = CRASH_DUMP_WRITE_CHUNK_SIZE;
+    }
+    uint32_t *dst = crash_dump_record_buffer;
+    for (uint32_t i = 0; i < n / 4; i++)
+    {
+      dst[i] = src[done / 4 + i];
+    }
+    Card_WriteAndVerifyEeprom(CRASH_DUMP_EEPROM_BASE + rec_offset +
+                                  CRASH_DUMP_THREAD_OFF_SNAPSHOT + done,
+                              (uint8_t *)crash_dump_record_buffer, n);
+    done += n;
+  }
 }
 
 // Write staged bytes into the record at `offset`, in
@@ -432,18 +458,20 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
   uint32_t records_left = total;
   uint32_t offset = CRASH_DUMP_HEADER_SIZE;
   uint32_t rec_offset;
+  uint32_t snapshot_bytes;
   // Record 0 is always the current thread; the hook regs hold its live state.
   struct crash_thread_slot *current_slot =
       (current_index >= 0) ? &crash_thread_slots[current_index] : NULL;
   const struct crash_thread_view *current_view =
       (current_index >= 0) ? &crash_prelock_views[current_index] : NULL;
-  uint32_t size = StageThreadRecord(offset, &records_left, current_slot, current_view,
-                                    &regs[CRASH_DUMP_REG_R0], sp_base,
-                                    regs[CRASH_DUMP_REG_PC], regs[CRASH_DUMP_REG_LR],
-                                    true, &rec_offset);
+  uint32_t size = StageThreadRecordHeader(offset, &records_left, current_slot, current_view,
+                                          &regs[CRASH_DUMP_REG_R0], sp_base,
+                                          regs[CRASH_DUMP_REG_PC], regs[CRASH_DUMP_REG_LR],
+                                          true, &rec_offset, &snapshot_bytes);
   if (size != 0)
   {
-    WriteStaged(rec_offset, size);
+    WriteStaged(rec_offset, CRASH_DUMP_THREAD_RECORD_HEADER_SIZE);
+    StreamSnapshot(rec_offset, sp_base, snapshot_bytes);
     offset = rec_offset + size;
   }
   for (uint32_t i = 0; i < n_slots; i++)
@@ -461,13 +489,15 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
     uint32_t pc = ((uint32_t)slot->t->context.function_address_plus_4) - 4;
     uint32_t lr = (uint32_t)slot->t->context.exit_function;
     uint32_t sp = (uint32_t)slot->t->context.usable_stack_pointer;
-    size = StageThreadRecord(offset, &records_left, slot, &crash_prelock_views[i],
-                             slot->t->context.registers, sp, pc, lr, false, &rec_offset);
+    size = StageThreadRecordHeader(offset, &records_left, slot, &crash_prelock_views[i],
+                                   slot->t->context.registers, sp, pc, lr, false,
+                                   &rec_offset, &snapshot_bytes);
     if (size == 0)
     {
       break;
     }
-    WriteStaged(rec_offset, size);
+    WriteStaged(rec_offset, CRASH_DUMP_THREAD_RECORD_HEADER_SIZE);
+    StreamSnapshot(rec_offset, sp, snapshot_bytes);
     offset = rec_offset + size;
   }
 

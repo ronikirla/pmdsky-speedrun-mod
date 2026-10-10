@@ -2,15 +2,22 @@
 
 The record layout mirrors ``src/crash_dump.h`` in the mod source tree: a
 0x100-byte header followed by packed variable-length thread records (one per
-thread, each with its own stack snapshot), all values little-endian.  The mod
-writes the record into the backup EEPROM at offset 0xB6B0, which maps 1:1
-onto the ``.sav`` file.
+thread, each with its own stack snapshot), all values little-endian.  The
+mod writes the record into the save file's backup EEPROM at offset 0xB6B0,
+which maps 1:1 onto the ``.sav`` file.  Since format v5 the record spans
+0x8000 bytes (0xB6B0..0x136B0 in the save file).
 
-Version 4 records add per-thread saved registers and OS wait-queue linkage
-(queue/mutex/link.prev/link.next/thread pointer) captured before the dump's
-own card writes, plus a header SYS block (uplink counters, frame flags, queue
-samples).  Only version 4 is supported: older records have a different
-layout.
+Version 5 records grow the record region from 0x1000 to 0x8000 (same base
+0xB6B0, extending over the game's second save copy - the game rewrites that
+copy on the next in-game save, so extract the .sav promptly after a dump).
+Per-thread snapshots are bounded by a fair share of the region instead of
+the mod's staging buffer and stream out in small chunks, so they cover a
+full used stack in practice. Version 4 records add per-thread saved
+registers and OS wait-queue linkage (queue/mutex/link.prev/link.next/thread
+pointer) captured before the dump's own card writes, plus a header SYS block
+(uplink counters, frame flags, queue samples); v5 keeps that layout and only
+grows the region. Only version 5 is supported: older records have a
+different layout.
 
 This module is intentionally dependency-free (standard library only).
 """
@@ -24,19 +31,19 @@ from typing import List, Optional
 # --- Constants mirrored from src/crash_dump.h -------------------------------
 
 EEPROM_BASE = 0xB6B0        # CRASH_DUMP_EEPROM_BASE
-RECORD_SIZE = 0x1000        # CRASH_DUMP_SIZE
+RECORD_SIZE = 0x8000        # CRASH_DUMP_SIZE (v5: extends over the game's
+                            # second save copy from 0xC800 on)
 HEADER_SIZE = 0x100         # CRASH_DUMP_HEADER_SIZE
 MSG_MAX = 0x3F              # CRASH_DUMP_MSG_MAX (0x40-byte field incl. NUL)
 
 THREAD_TABLE_OFFSET = 0x100            # first thread record
 THREAD_RECORD_HEADER_SIZE = 0x74       # CRASH_DUMP_THREAD_RECORD_HEADER_SIZE
-MAX_SNAPSHOT_BYTES = 0xDC              # CRASH_DUMP_MAX_SNAPSHOT_BYTES
 
 MAGIC = 0x48535243          # 'CRSH' when read little-endian
 MAGIC_BYTES = b"CRSH"
 THREAD_MAGIC = 0x44524854   # 'THRD'
 THREAD_MAGIC_BYTES = b"THRD"
-RECORD_VERSION = 4          # CRASH_DUMP_VERSION
+RECORD_VERSION = 5          # CRASH_DUMP_VERSION
 
 HOOK_FATAL_ERROR = 1        # CRASH_DUMP_HOOK_FATAL_ERROR
 HOOK_OS_PANIC = 2           # CRASH_DUMP_HOOK_OS_PANIC
@@ -320,7 +327,7 @@ def locate_record(data: bytes, offset: Optional[int] = None) -> LocatedRecord:
     Resolution order:
 
     1. ``offset`` given explicitly -> slice there, no questions asked.
-    2. Input is exactly 0x1000 bytes -> treat it as a bare record that was
+    2. Input is exactly 0x8000 bytes -> treat it as a bare record that was
        extracted from a save.
     3. File is large enough -> use the default EEPROM location (0xB6B0).
        An all-0xFF region there means "no crash recorded".
@@ -343,18 +350,23 @@ def locate_record(data: bytes, offset: Optional[int] = None) -> LocatedRecord:
     if len(data) == RECORD_SIZE:
         if _is_erased(data) or _is_erased(data, 0x00):
             raise CleanSaveError(
-                "input is a bare 0x1000-byte record that is entirely erased "
-                "(all 0xFF / all 0x00)"
+                "input is a bare %s-byte record that is entirely erased "
+                "(all 0xFF / all 0x00)" % hex(RECORD_SIZE)
             )
         warnings.append(
-            "Input is exactly 0x1000 bytes: treating it as a bare crash dump record."
+            "Input is exactly %s bytes: treating it as a bare crash dump record."
+            % hex(RECORD_SIZE)
         )
         return LocatedRecord(data, 0, warnings)
 
     default_end = EEPROM_BASE + RECORD_SIZE
     if len(data) >= default_end:
         region = data[EEPROM_BASE:default_end]
-        if _is_erased(region):
+        # Clean-save detection uses only the first 0x1000 bytes: that sub-region
+        # is never written by the game, so all-0xFF there means no dump was ever
+        # written. The rest of the v5 region overlaps the game's second save
+        # copy, which holds game data even on a clean save.
+        if _is_erased(region[:0x1000]):
             raise CleanSaveError(
                 "the crash dump region at file offset %s is erased (all 0xFF); "
                 "the game has not crashed (or the dump was already consumed)"
@@ -485,12 +497,12 @@ def parse_sys_block(record: bytes) -> SysInfo:
 
 
 def parse_record(record: bytes, source_offset: int = 0) -> CrashDump:
-    """Decode a raw 0x1000-byte record into a :class:`CrashDump`.
+    """Decode a raw 0x8000-byte record into a :class:`CrashDump`.
 
     Validation problems (bad magic, checksum, truncated thread table) are
     collected into ``warnings`` instead of aborting: a partially corrupted
     record is still worth reporting.  A record with valid magic but a
-    different version is rejected outright: only version 4 is supported.
+    different version is rejected outright: only version 5 is supported.
     """
     if len(record) < RECORD_SIZE:
         raise DumpError(

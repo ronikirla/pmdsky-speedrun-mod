@@ -18,6 +18,13 @@
 // card writes - that is the evidence needed to diagnose queue corruption
 // (lost waiters, spliced queues) of the kind the wake-queue rework fixes.
 //
+// Version 5 grows the record region from 0x1000 to 0x8000 (0xb6b0..0x136b0,
+// see the area note below), so each thread's snapshot is bounded by the
+// fair-share math instead of the staging buffer: snapshots stream out in
+// CRASH_DUMP_WRITE_CHUNK_SIZE pieces, one staged memcpy + card write at a
+// time. The header and thread-record layouts are otherwise unchanged from
+// version 4.
+//
 // Record layout at CRASH_DUMP_EEPROM_BASE (all little-endian):
 //
 // Header (0x100 bytes):
@@ -85,17 +92,24 @@
 // Thread record 0 is always the current thread (the crashing thread, or the
 // watchdog for a manual trigger); the other records follow the game's thread
 // list order (highest priority first). Each record's snapshot gets a fair
-// share of the space that is still left (see StageThreadRecord), capped at
-// CRASH_DUMP_MAX_SNAPSHOT_BYTES, so traces get shallower but always fit when
-// the game has many threads.
+// share of the space that is still left (see StageThreadRecordHeader /
+// StreamSnapshot), so traces get shallower but always fit when the game has
+// many threads; with an empty region and 16 threads that share is ~0x77C
+// bytes per thread - a full used stack in practice. Snapshots stream out in
+// CRASH_DUMP_WRITE_CHUNK_SIZE pieces (each staged through the buffer before
+// its card write), so a snapshot can be longer than the buffer.
 //
-// The area is free: the mod's RNG state ends at 0xb6a6 and the next mod-owned
-// EEPROM region (the magic byte) is at 0xc7f0, so 0xb6b0..0xc6af is unused.
+// Record region (v5): 0xb6b0..0x136b0. 0xb6b0..0xc6af is untouched by the
+// game; 0xc6b0..0xc7f0 is erased-but-never-written flash; everything from
+// 0xc800 on is the game's second save copy, which the record is allowed to
+// overwrite: a dump survives only until the next in-game save rewrites that
+// copy, so extract the .sav before saving the game. The mod's own magic byte
+// (the config marker, src/eeprom.c) sits at 0xb6a7, below the region.
 
 #define CRASH_DUMP_EEPROM_BASE 0xb6b0
-#define CRASH_DUMP_SIZE 0x1000
+#define CRASH_DUMP_SIZE 0x8000
 #define CRASH_DUMP_MAGIC 0x48535243 // 'CRSH'
-#define CRASH_DUMP_VERSION 4
+#define CRASH_DUMP_VERSION 5
 
 #define CRASH_DUMP_HOOK_FATAL_ERROR 1
 #define CRASH_DUMP_HOOK_OS_PANIC 2
@@ -110,13 +124,15 @@
 // means the list is corrupt and ends the walk.
 #define CRASH_DUMP_MAX_THREADS 16
 // The record is staged in RAM one piece at a time (a crash handler must not
-// hold 0x1000 bytes of stack), so each thread's snapshot is capped at the
-// staging buffer size minus the record header. The whole mod (code + data +
-// BSS) shares one 0x8010 linker region, so this buffer is deliberately small:
-// the per-thread snapshot at 16 threads (the common case) is bounded by the
-// fair-share math in StageThreadRecord (~0x7C) well below this cap anyway.
-#define CRASH_DUMP_RECORD_BUFFER_SIZE 0x150
-#define CRASH_DUMP_MAX_SNAPSHOT_BYTES (CRASH_DUMP_RECORD_BUFFER_SIZE - CRASH_DUMP_THREAD_RECORD_HEADER_SIZE)
+// hold the whole record): the 0x100 header and each 0x74 thread-record
+// header through the buffer, each thread's snapshot in
+// CRASH_DUMP_WRITE_CHUNK_SIZE-sized pieces. Every staged piece is fully
+// copied before its card write, so each piece lands consistent even though
+// the source stack keeps living. The whole mod (code + data + BSS) shares
+// one 0x8010 linker region, so this buffer stays small (0x150 -> 0x100 in
+// v5 funded the streaming code); the per-thread snapshot is bounded by the
+// fair-share math in StageThreadRecordHeader only, never by this buffer.
+#define CRASH_DUMP_RECORD_BUFFER_SIZE 0x100
 
 
 #define CRASH_DUMP_OFF_MAGIC 0x000
@@ -179,7 +195,7 @@
 #define CRASH_DUMP_THREAD_FLAG_CURRENT 2
 // The sp was outside the recorded stack bounds (or no struct thread matched
 // it) but the snapshot was still captured upward from sp - see
-// StageThreadRecord.
+// StageThreadRecordHeader.
 #define CRASH_DUMP_THREAD_FLAG_SP_OUTSIDE 4
 
 // Layout of the regs array passed in from the hook stubs:

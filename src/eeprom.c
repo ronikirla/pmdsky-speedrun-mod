@@ -9,7 +9,12 @@
 
 static struct eeprom_timer eeprom_timer;
 static struct eeprom_configurations eeprom_configurations;
-#define EEPROM_MAGIC_ADDRESS 0xc7f0
+// Config marker byte. v5 moved it from 0xc7f0 (inside the crash dump record
+// region 0xb6b0..0x136b0, see src/crash_dump.h) to 0xb6a7, in the free gap
+// between the mod's RNG state (ends 0xb6a6) and the dump region. The old
+// address is still read once for migration (LoadIGTAndConfigurations).
+#define EEPROM_MAGIC_ADDRESS 0xb6a7
+#define EEPROM_MAGIC_OLD_ADDRESS 0xc7f0
 #define EEPROM_MAGIC 0x67
 #define EEPROM_TIMER_BASE_ADDRESS 0xb65c
 #define EEPROM_CONFIGURATIONS_BASE_ADDRESS 0xb670
@@ -149,11 +154,20 @@ void LoadIGTAndConfigurations(void) {
   uint8_t magic;
   Card_ReadEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
   if (magic != EEPROM_MAGIC) {
-    SaveIGT(true);
-    SaveConfigurations();
-    magic = EEPROM_MAGIC;
-    Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
-    goto CLEANUP;
+    // One-time migration from the pre-v5 magic address: a save written by an
+    // older build has the marker at 0xc7f0 - keep its config/IGT and just
+    // write the marker to the new location instead of re-initializing.
+    Card_ReadEeprom(EEPROM_MAGIC_OLD_ADDRESS, &magic, sizeof(uint8_t));
+    if (magic == EEPROM_MAGIC) {
+      Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
+    }
+    else {
+      SaveIGT(true);
+      SaveConfigurations();
+      magic = EEPROM_MAGIC;
+      Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
+      goto CLEANUP;
+    }
   }
 
   // Read index

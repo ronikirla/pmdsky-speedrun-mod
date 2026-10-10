@@ -9,6 +9,8 @@ from . import cpsr as cpsr_mod
 from .backtrace import Frame, snapshot_rows
 from .dump import (
     RECORD_SIZE,
+    EEPROM_BASE,
+    THREAD_RECORD_HEADER_SIZE,
     CrashDump,
     HOOK_FATAL_ERROR,
     HOOK_OS_PANIC,
@@ -187,6 +189,17 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
     push("  threads     %d in the game's list, %d records written%s"
          % (dump.thread_count, dump.threads_written,
             "" if dump.complete else "  [dump incomplete]"))
+    # Written extent vs the 0x8000 reserve: the last record's end offset.
+    used_extent = 0
+    for t in dump.threads:
+        end = t.record_offset + THREAD_RECORD_HEADER_SIZE + len(t.snapshot)
+        used_extent = max(used_extent, end)
+    push("  extent      %s of %s bytes written (ends at file offset %s)"
+         % (hex(used_extent), hex(RECORD_SIZE),
+            hex(ctx.source_offset + used_extent)))
+    if used_extent > 0xC800 - EEPROM_BASE:
+        push("  note        the record extends over the game's second save copy; "
+             "it survives only until the next in-game save")
 
     push("")
     push("Crash site")

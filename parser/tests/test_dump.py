@@ -73,11 +73,11 @@ class ParseRecordTests(unittest.TestCase):
         with self.assertRaises(dump_mod.DumpError):
             dump_mod.parse_record(make_record(version=99))
 
-    def test_v3_record_rejected(self):
-        # Version 3 (the previous format) is no longer supported.
+    def test_v4_record_rejected(self):
+        # Version 4 (the previous format) is no longer supported.
         with self.assertRaises(dump_mod.DumpError) as ctx:
-            dump_mod.parse_record(make_record(version=3))
-        self.assertIn("version 3", str(ctx.exception))
+            dump_mod.parse_record(make_record(version=4))
+        self.assertIn("version 4", str(ctx.exception))
 
     def test_v2_record_rejected(self):
         with self.assertRaises(dump_mod.DumpError) as ctx:
@@ -145,7 +145,8 @@ class ThreadTableTests(unittest.TestCase):
         rec = make_thread_record(snapshot_words=[0] * 8, snapshot_bytes_field=0x10000)
         dump = dump_mod.parse_record(make_record(threads=[rec], msg=b""))
         record = dump.threads[0]
-        self.assertEqual(record.snapshot_bytes, 0xE8C)
+        # 0x8000 record: 0x8000 - (0x100 + 0x74) = 0x7E8C bytes available.
+        self.assertEqual(record.snapshot_bytes, 0x7E8C)
         self.assertTrue(any("runs past the end" in w for w in dump.warnings))
 
     def test_snapshot_bytes_rounded_down(self):
@@ -169,8 +170,33 @@ class ThreadTableTests(unittest.TestCase):
         self.assertEqual(dump.crashing_index, 0)
         self.assertTrue(any("out of range" in w for w in dump.warnings))
 
+    def test_full_region_sixteen_thread_records(self):
+        # The v5 fair-share worst case: 16 threads, empty region -> each
+        # record gets (0x8000 - 0x100) / 16 = 0x7F0 bytes, i.e. a snapshot of
+        # 0x7F0 - 0x74 = 0x77C bytes, and 16 such records exactly fill the
+        # record. Exercises the walker across the whole enlarged region.
+        threads = []
+        for i in range(16):
+            threads.append(make_thread_record(
+                thread_id=i, priority=10 + i,
+                sp=0x23EE0000 + i * 0x1000,
+                stack_start=0x23EE0000 + i * 0x1000,
+                stack_end=0x23EE0800 + i * 0x1000,
+                flags=dump_mod.THREAD_FLAG_SP_VALID | (
+                    dump_mod.THREAD_FLAG_CURRENT if i == 0 else 0),
+                snapshot_words=[0x1000 + i] + [0] * 478))
+        record = make_record(threads=threads, msg=b"")
+        self.assertEqual(len(record), dump_mod.RECORD_SIZE)
+        dump = dump_mod.parse_record(record)
+        self.assertEqual(len(dump.threads), 16)
+        self.assertEqual(dump.warnings, [])
+        for i, t in enumerate(dump.threads):
+            self.assertEqual(t.record_offset, 0x100 + i * 0x7F0)
+            self.assertEqual(t.snapshot_bytes, 0x77C)
+            self.assertEqual(t.stack_words()[0], 0x1000 + i)
 
-class V4FieldsTests(unittest.TestCase):
+
+class V5FieldsTests(unittest.TestCase):
     def test_thread_registers_and_linkage(self):
         rec = make_thread_record(
             regs=[0x100 + i for i in range(13)],
@@ -285,6 +311,15 @@ class LocateRecordTests(unittest.TestCase):
     def test_clean_save_region(self):
         with self.assertRaises(dump_mod.CleanSaveError):
             dump_mod.locate_record(bytes([0xFF] * 0x20000))
+
+    def test_clean_save_with_game_data_in_extended_region(self):
+        # A realistic clean save: the dump sub-region (0xB6B0..0xC6AF) is
+        # erased, but the v5 region extends over the game's second save copy
+        # (0xC800..), which holds game data. Still a clean save.
+        blob = bytearray([0xFF] * 0x20000)
+        blob[0xC800:0xC820] = b"POKE_DUN_SORA\x00\x00\x00"
+        with self.assertRaises(dump_mod.CleanSaveError):
+            dump_mod.locate_record(bytes(blob))
 
     def test_clean_save_bare(self):
         with self.assertRaises(dump_mod.CleanSaveError):

@@ -5,6 +5,12 @@ speedrun mod writes into the save file's backup EEPROM, decodes it, resolves
 addresses against the [`pmdsky-debug`](../pmdsky-debug) reverse-engineered
 symbol tables, and prints a user-friendly report.
 
+The record (format version 5) lives at save-file offset `0xB6B0` and spans
+`0x8000` bytes (`0xB6B0..0x136B0`). It extends over the game's second save
+copy, so it survives only until the next in-game save: extract the `.sav`
+promptly after a dump. Per-thread snapshots are bounded by a fair share of
+the region, so they cover a full used stack in practice.
+
 ```text
 python -m parser path\to\save.sav [options]
 ```
@@ -56,7 +62,7 @@ python -m parser SAV
                       ".definelabel NAME,0xADDR" / "NAME = addr" / "equ"),
                       or nm-style "ADDR TYPE NAME" text
   --rom FILE          game ROM (rom.nds or out.nds) for pointer dereferencing
-  --max-frames N      backtrace frame cap (default 32)
+  --max-frames N      backtrace frame cap (default 128)
   --raw-stack [N]     also print the annotated stack snapshot of the current
                       thread (bare flag = the whole snapshot)
   --json              machine-readable JSON output
@@ -65,7 +71,7 @@ python -m parser SAV
 Exit codes: `0` report printed · `1` error · `2` clean save (no crash dump).
 
 The symbol directory is found automatically when the command runs inside this
-repository (`pmdsky-debug/symbols`). A file that is exactly 0x1000 bytes is
+repository (`pmdsky-debug/symbols`). A file that is exactly 0x8000 bytes is
 treated as a bare dump record; other layouts are searched for a valid
 `'CRSH'` record.
 

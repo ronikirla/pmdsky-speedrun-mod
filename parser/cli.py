@@ -57,8 +57,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
              "the FatalError assert file/line and formats %%s arguments (needs ndspy)",
     )
     parser.add_argument(
-        "--max-frames", type=_int_arg, default=32, metavar="N",
-        help="maximum number of backtrace frames to report (default: 32)",
+        "--max-frames", type=_int_arg, default=128, metavar="N",
+        help="maximum number of backtrace frames to report (default: 128)",
     )
     parser.add_argument(
         "--raw-stack", nargs="?", type=_int_arg, const=-1, default=0, metavar="WORDS",
