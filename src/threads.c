@@ -102,17 +102,8 @@ void MainRoutine(void *)
 {
   while (true)
   {
-    // Skip all USB uplink traffic while overlay 30 (quicksave) is loaded:
-    // the game is doing a burst of EEPROM writes then, and mod card
-    // transactions must stay out of that window (occasional eeprom
-    // corruption after a quicksave). UplinkInit/UplinkPoll are the only USB
-    // senders in the mod, so gating them gates all USB data.
-    bool quicksave_active = OverlayIsLoaded(OGROUP_OVERLAY_30);
-    if (!quicksave_active)
-    {
-      // will only init if it isn't elready and if certain overlays are loaded
-      UplinkInit();
-    }
+    // will only init if it isn't elready and if certain overlays are loaded
+    UplinkInit();
     HandleSoftReset();
     HandleHUDToggle();
     HandleSpeedToggle();
@@ -124,38 +115,20 @@ void MainRoutine(void *)
     UpdateInputDisplay();
     UpdateHUDSlots();
 
+    // static uint8_t buffer[32];
+
     // int lock_id = OS_GetLockID();
     // Card_LockRom(lock_id);
     // OS_SpinWait(2000000);
     // OS_SpinWait(2000000);
     // OS_SpinWait(2000000);
     // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
+    // Cardi_ReadRom(2, (const void *)0x00004000, buffer, 32);
     // Card_UnlockRom(lock_id);
     // OS_ReleaseLockId(lock_id);
 
-    // SaveIGT(true);
-    if (!quicksave_active)
-    {
-      //  Stream the memory samples over USB (runs only while the mod thread
-      //  would otherwise be idle; pauses while the game holds the card lock)
-      UplinkPoll();
-    }
+    SaveIGT(true);
+    UplinkPoll();
     OS_SleepThread(&mod_wake_queue);
   }
 }

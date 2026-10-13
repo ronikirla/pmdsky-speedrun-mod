@@ -242,7 +242,6 @@ uint16_t dspico_card_lock_wait_persistent(void)
   if (s_reserved_valid)
   {
     Card_LockRom(s_reserved_lock_id); // waits until the card is free
-    OS_SpinWait(2000000);
     return s_reserved_lock_id;
   }
   return dspico_card_lock_wait();

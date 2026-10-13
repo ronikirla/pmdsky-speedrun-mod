@@ -31,6 +31,7 @@ typedef struct
   uint32_t tx_bytes;   // bytes pumped to the host
   uint32_t tx_drops;   // bytes dropped (firmware TX ring overflow)
   uint32_t rx_pending; // host bytes waiting in the firmware RX ring
+  uint32_t resyncs;    // firmware card-bus dirty-resync counter (status word 4)
 } uplink_local_status_t;
 
 static uplink_local_status_t s_local;
@@ -59,6 +60,8 @@ static bool uplink_local_send_cmd(uint64_t command)
     uplink_card_lock_skips++;
     return false;
   }
+  // OS_SpinWait(1000000);
+  // OS_SpinWait(1000000);
   dspico_card_set_cmd(command);
   dspico_card_start_xfer(DSPICO_USB_DEFAULT_COMMAND_SETTINGS, false);
   dspico_card_wait_busy();
@@ -92,17 +95,47 @@ static bool uplink_local_write_block(const uint8_t *src, uint32_t valid)
 // Read a 512-byte block (status or host RX) from the firmware.
 // Returns 0 when the transaction was skipped (card lock unavailable or card
 // bus dead); the contents of dst are then undefined.
+
+// TODO: probably dead code to be removed
 static uint32_t uplink_local_read_block(uint8_t *dst, uint32_t endpoint)
 {
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
   uint16_t lock = dspico_card_lock_wait_persistent();
   if (lock == DSPICO_LOCK_ID_INVALID)
   {
     uplink_card_lock_skips++;
     return 0;
   }
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
   dspico_card_set_cmd(DSPICO_CMD_USB_READ_DATA(0, endpoint));
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
   dspico_card_start_xfer(DSPICO_USB_READ_DATA_SETTINGS, false);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
   dspico_card_cpu_read(dst, 512 / 4);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
+  OS_SpinWait(1000000);
   dspico_card_lock_release_persistent(lock);
   return 512;
 }
@@ -124,6 +157,7 @@ static bool uplink_local_poll_status(void)
   s_local.tx_bytes = uplink_local_le32(block + 4);
   s_local.tx_drops = uplink_local_le32(block + 8);
   s_local.rx_pending = uplink_local_le32(block + 12);
+  s_local.resyncs = uplink_local_le32(block + 16);
   return true;
 }
 
@@ -365,20 +399,22 @@ void UplinkPoll(void)
     }
   }
 
-  // 3. Firmware status + host RX, every ~15 frames (~250 ms)
+  // 3. Firmware status + host RX, every ~15 frames(~250 ms)
+  //    Status poll re-enabled for the F3a test (precomputed firmware
+  //    status block). The rx_pending / host-command branch stays off.
   {
     static uint32_t s_poll_cnt = 0;
-    if (++s_poll_cnt >= UPLINK_LOCAL_POLL_EVERY)
+    // if (++s_poll_cnt >= UPLINK_LOCAL_POLL_EVERY)
+    // {
+    s_poll_cnt = 0;
+    if (uplink_local_poll_status())
     {
-      s_poll_cnt = 0;
-      if (uplink_local_poll_status())
+      if (s_local.rx_pending > 0)
       {
-        if (s_local.rx_pending > 0)
-        {
-          uint32_t n = uplink_local_read_block(s_rx_buf, UPLINK_LOCAL_RX_EP);
-          uplink_cmd_feed(s_rx_buf, n);
-        }
+        uint32_t n = uplink_local_read_block(s_rx_buf, UPLINK_LOCAL_RX_EP);
+        uplink_cmd_feed(s_rx_buf, n);
       }
     }
+    //}
   }
 }
