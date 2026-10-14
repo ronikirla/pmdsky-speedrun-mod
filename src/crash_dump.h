@@ -4,7 +4,7 @@
 // Crash dump: when FatalError or OS_Panic halts the game, the hook stub in
 // patches/patch.asm captures the registers and calls CrashDumpWrite, which
 // writes a self-validating record to the backup EEPROM for offline
-// inspection. The watchdog thread (CrashDumpWatchdogRoutine) writes the same
+// inspection. The watchdog trigger writes the same
 // record on the L+R+X+Y button combo, for hangs that never reach a hook.
 // The record is left untouched on clean runs (all 0xFF).
 //
@@ -134,7 +134,6 @@
 // fair-share math in StageThreadRecordHeader only, never by this buffer.
 #define CRASH_DUMP_RECORD_BUFFER_SIZE 0x100
 
-
 #define CRASH_DUMP_OFF_MAGIC 0x000
 #define CRASH_DUMP_OFF_VERSION 0x004
 #define CRASH_DUMP_OFF_HOOK_ID 0x008
@@ -218,8 +217,3 @@ void CrashDumpWrite(uint32_t hook_id, const uint32_t *regs, uint32_t sp_base);
 // Capture the live thread states and write the dump record (hook_id
 // CRASH_DUMP_HOOK_MANUAL). Called by the watchdog on L+R+X+Y.
 void CrashDumpTrigger(void);
-
-// Highest-priority mod thread: polls the button combo every frame and turns
-// hangs (infinite loops) into a diagnosable crash dump. Runs until the first
-// dump is written (crash_dump_active then blocks any further trigger).
-void CrashDumpWatchdogRoutine(void *arg);

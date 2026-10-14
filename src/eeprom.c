@@ -9,12 +9,7 @@
 
 static struct eeprom_timer eeprom_timer;
 static struct eeprom_configurations eeprom_configurations;
-// Config marker byte. v5 moved it from 0xc7f0 (inside the crash dump record
-// region 0xb6b0..0x136b0, see src/crash_dump.h) to 0xb6a7, in the free gap
-// between the mod's RNG state (ends 0xb6a6) and the dump region. The old
-// address is still read once for migration (LoadIGTAndConfigurations).
-#define EEPROM_MAGIC_ADDRESS 0xb6a7
-#define EEPROM_MAGIC_OLD_ADDRESS 0xc7f0
+#define EEPROM_MAGIC_ADDRESS 0xc7f0
 #define EEPROM_MAGIC 0x67
 #define EEPROM_TIMER_BASE_ADDRESS 0xb65c
 #define EEPROM_CONFIGURATIONS_BASE_ADDRESS 0xb670
@@ -23,94 +18,18 @@ static struct eeprom_configurations eeprom_configurations;
 static bool igt_loaded = false;
 static int eeprom_lock_id = -3;
 
-// Serialize every mod backup (EEPROM) section on one shared lock owner. All
-// section call sites share one CARD lock id, and CARDi_LockResource is
-// reentrant BY ID across threads, so two threads could be inside
-// Card_WriteAndVerifyEeprom at once and clobber the shared cardi_arg buffer
-// (p->cmd) / the p->cur_th wakeup slot -> lost wakeup -> a thread sleeps
-// forever holding lock_ref. One OS mutex around each whole
-// Card_LockBackup..Card_UnlockBackup section makes that impossible.
-// OS_LockMutex is per-thread reentrant (os_mutex::count), so nested sections
-// on the same thread (LoadIGTAndConfigurations -> SaveIGT/SaveConfigurations)
-// keep working. A BSS-zeroed os_mutex is already a valid empty mutex
-// (OS_InitMutex writes exactly NULL/NULL/0), no init call needed.
-static struct os_mutex eeprom_mutex;
-
-// Shared CARD backup lock id, allocated once. Returns -1 when allocation
-// failed. The -3 sentinel can NEVER leave this function: OS_LOCK_ID_ERROR
-// (-3) is what OS_GetLockID returns when its pool is exhausted, and it
-// collides with CARDi's "lock free" sentinel - Card_LockBackup(-3) would be
-// treated as a reentrant entry on a free lock and Card_UnlockBackup would hit
-// the "not locking" panic path. Valid ARM9 ids are 0x40..0x6F.
 int GetEepromLockId(void)
 {
   if (eeprom_lock_id == -3)
   {
-    int id = OS_GetLockID();
-    if (id >= 0x40 && id <= 0x6F)
-    {
-      eeprom_lock_id = id;
-    }
+    eeprom_lock_id = OS_GetLockID();
   }
-  return (eeprom_lock_id >= 0x40 && eeprom_lock_id <= 0x6F) ? eeprom_lock_id : -1;
-}
-
-// Enter/leave a serialized backup section (see eeprom_mutex above). Pair
-// every successful EepromLock with exactly one EepromUnlock.
-bool EepromLock(void)
-{
-  OS_LockMutex(&eeprom_mutex);
-  if (GetEepromLockId() < 0)
-  {
-    OS_UnlockMutex(&eeprom_mutex);
-    return false;
-  }
-  Card_LockBackup(eeprom_lock_id);
-  return true;
-}
-
-void EepromUnlock(void)
-{
-  Card_UnlockBackup(eeprom_lock_id);
-  OS_UnlockMutex(&eeprom_mutex);
-}
-
-// Bounded-wait variant for the crash dump: spend at most ~timeout_ms waiting
-// for the section (the dump must never block behind a wedged mod section -
-// that is exactly when the dump is needed), then take the CARD lock and
-// proceed regardless. Returns false only when no valid CARD lock id exists
-// (caller must then skip its writes). If the wait timed out we proceed
-// WITHOUT the section mutex (best-effort exclusion); EepromUnlock is still
-// correct then, because OS_UnlockMutex is owner-checked.
-bool EepromTryLock(uint32_t timeout_ms)
-{
-  if (!OS_TryLockMutex(&eeprom_mutex))
-  {
-    for (uint32_t waited = 0; waited < timeout_ms; waited++)
-    {
-      OS_Sleep(1);
-      if (OS_TryLockMutex(&eeprom_mutex))
-      {
-        break;
-      }
-    }
-  }
-  if (GetEepromLockId() < 0)
-  {
-    OS_UnlockMutex(&eeprom_mutex);
-    return false;
-  }
-  Card_LockBackup(eeprom_lock_id);
-  return true;
+  return eeprom_lock_id;
 }
 
 void SaveIGT(bool o30_check)
 {
   if (!igt_loaded || (o30_check && OverlayIsLoaded(OGROUP_OVERLAY_30)))
-  {
-    return;
-  }
-  if (!EepromLock())
   {
     return;
   }
@@ -131,11 +50,12 @@ void SaveIGT(bool o30_check)
   eeprom_timer.redundant_timers[new_index].seconds = PLAY_TIME_SECONDS;
   eeprom_timer.redundant_timers[new_index].frames = PLAY_TIME_FRAME_COUNTER;
 
+  Card_LockBackup(eeprom_lock_id);
   // Write IGT
   Card_WriteAndVerifyEeprom(EEPROM_TIMER_BASE_ADDRESS + eeprom_offset, &eeprom_timer.redundant_timers[new_index], 5);
   // Write index
   Card_WriteAndVerifyEeprom(EEPROM_TIMER_BASE_ADDRESS, &eeprom_timer.index, 1);
-  EepromUnlock();
+  Card_UnlockBackup(eeprom_lock_id);
 }
 
 void SaveRNGSeedForSoftReset(void)
@@ -143,56 +63,41 @@ void SaveRNGSeedForSoftReset(void)
   char rng_seed_save[RNG_INPUT_LEN + 1];
   memcpy(rng_seed_save, base_rng_text, RNG_INPUT_LEN + 1);
 
-  if (!EepromLock())
-  {
-    return;
-  }
+  int lock_id = GetEepromLockId();
+  Card_LockBackup(lock_id);
   Card_WriteAndVerifyEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, rng_seed_save, RNG_INPUT_LEN + 1);
-  EepromUnlock();
+  Card_UnlockBackup(lock_id);
 }
 
 void SaveConfigurations(void)
 {
-  if (!EepromLock())
-  {
-    return;
-  }
   eeprom_configurations.SRAM_hud_display_mode = hud_display_mode;
   eeprom_configurations.SRAM_optimization_mode = optimization_mode;
   eeprom_configurations.SRAM_file_timer = file_timer;
   eeprom_configurations.SRAM_start_time = start_time;
   eeprom_configurations.SRAM_show_idle_seconds = GetShowIdleSeconds();
 
+  eeprom_lock_id = GetEepromLockId();
+
+  Card_LockBackup(eeprom_lock_id);
   Card_WriteAndVerifyEeprom(EEPROM_CONFIGURATIONS_BASE_ADDRESS, &eeprom_configurations, sizeof(eeprom_configurations));
-  EepromUnlock();
+  Card_UnlockBackup(eeprom_lock_id);
 }
 
 void LoadIGTAndConfigurations(void)
 {
-  if (!EepromLock())
-  {
-    return;
-  }
+  eeprom_lock_id = GetEepromLockId();
+
+  Card_LockBackup(eeprom_lock_id);
   uint8_t magic;
   Card_ReadEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
   if (magic != EEPROM_MAGIC)
   {
-    // One-time migration from the pre-v5 magic address: a save written by an
-    // older build has the marker at 0xc7f0 - keep its config/IGT and just
-    // write the marker to the new location instead of re-initializing.
-    Card_ReadEeprom(EEPROM_MAGIC_OLD_ADDRESS, &magic, sizeof(uint8_t));
-    if (magic == EEPROM_MAGIC)
-    {
-      Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
-    }
-    else
-    {
-      SaveIGT(true);
-      SaveConfigurations();
-      magic = EEPROM_MAGIC;
-      Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
-      goto CLEANUP;
-    }
+    SaveIGT(true);
+    SaveConfigurations();
+    magic = EEPROM_MAGIC;
+    Card_WriteAndVerifyEeprom(EEPROM_MAGIC_ADDRESS, &magic, sizeof(uint8_t));
+    goto CLEANUP;
   }
 
   // Read index
@@ -265,7 +170,7 @@ CLEANUP:
   memset(empty_seed, 0xFF, RNG_INPUT_LEN + 1);
   Card_WriteAndVerifyEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, empty_seed, RNG_INPUT_LEN + 1);
 
-  EepromUnlock();
+  Card_UnlockBackup(eeprom_lock_id);
   igt_loaded = true;
 }
 

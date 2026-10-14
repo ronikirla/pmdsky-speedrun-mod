@@ -19,18 +19,15 @@
 #define STACK_SIZE_1KB 1024
 // Lower number = higher priority. The watchdog must preempt a hung game
 // thread, so it runs above the other mod threads (10 and 30).
-#define WATCHDOG_THREAD_PRIO 5
 #define VBLANK_ROUTINE_THREAD_PRIO 10
 #define MAIN_ROUTINE_THREAD_PRIO 30
 
 void VCount0Routine(void *);
 void MainRoutine(void *);
 
-struct thread watchdog_thread;
 struct thread vblank_routine_thread;
 struct thread main_routine_thread;
 
-uint64_t watchdog_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
 //  1KB is enough for the vblank routine: its whole call graph (CalculateFPS /
 //  UpdateAPSIdleTime) uses only small HUD_LEN char buffers plus static arrays.
 //  The 2KB saved here keeps the code+data+bss region within its linker length.
@@ -105,9 +102,6 @@ __attribute__((used)) void InitThreads(void)
   // Paint the main routine's stack before its thread starts so the
   // periodic scan can measure the high-water mark (see scan_main_stack).
   paint_main_stack();
-  OS_CreateThread(&watchdog_thread, CrashDumpWatchdogRoutine, NULL,
-                  watchdog_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
-                  STACK_SIZE_1KB, WATCHDOG_THREAD_PRIO);
   OS_CreateThread(&vblank_routine_thread, VCount0Routine, NULL,
                   vblank_routine_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
                   STACK_SIZE_1KB, VBLANK_ROUTINE_THREAD_PRIO);
@@ -120,7 +114,6 @@ __attribute__((used)) void InitThreads(void)
   // is safe here - freshly created threads have queue == NULL and empty link
   // fields, so no stale queue node can result. Every later wake goes through
   // the queue (see WakeupThreads).
-  OS_WakeupThreadDirect(&watchdog_thread);
   OS_WakeupThreadDirect(&vblank_routine_thread);
   OS_WakeupThreadDirect(&main_routine_thread);
   // Bring up the DSpico USB uplink (card lock is held briefly per
@@ -162,7 +155,6 @@ void MainRoutine(void *)
 {
   while (true)
   {
-    // will only init if it isn't elready and if certain overlays are loaded
     UplinkInit();
     HandleSoftReset();
     HandleHUDToggle();
@@ -174,19 +166,6 @@ void MainRoutine(void *)
     UpdateAPS();
     UpdateInputDisplay();
     UpdateHUDSlots();
-
-    // static uint8_t buffer[32];
-
-    // int lock_id = OS_GetLockID();
-    // Card_LockRom(lock_id);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // OS_SpinWait(2000000);
-    // Cardi_ReadRom(2, (const void *)0x00004000, buffer, 32);
-    // Card_UnlockRom(lock_id);
-    // OS_ReleaseLockId(lock_id);
-
     SaveIGT(true);
     UplinkPoll();
     OS_SleepThread(&mod_wake_queue);

@@ -85,21 +85,31 @@ static uint8_t uplink_utoa(uint32_t v, uint8_t *out)
 // Card transactions (locked)
 //--------------------------------------------------------------------+
 
+// Persistent lock id for the uplink: reserved once
+// at UplinkInit and never returned to the game's free list, so the id
+// can never be handed out to the game's own card transactions.
+static uint16_t s_reserved_lock_id = DSPICO_LOCK_ID_INVALID;
+
+void ReserveDSPicoLockID(void)
+{
+  if (s_reserved_lock_id == DSPICO_LOCK_ID_INVALID)
+  {
+    s_reserved_lock_id = OS_GetLockID();
+  }
+}
+
 // Locked single card transaction, no data phase.
 // Returns false when the transaction was skipped (card lock unavailable or
 // card bus dead) so callers can retry later instead of running unlocked.
 static bool uplink_local_send_cmd(uint64_t command)
 {
-  uint16_t lock = dspico_card_lock_wait_persistent();
-  if (lock == DSPICO_LOCK_ID_INVALID)
-  {
-    uplink_card_lock_skips++;
-    return false;
-  }
+  Card_LockRom(s_reserved_lock_id);
   dspico_card_set_cmd(command);
   dspico_card_start_xfer(DSPICO_USB_DEFAULT_COMMAND_SETTINGS, false);
-  dspico_card_wait_busy();
-  dspico_card_lock_release_persistent(lock);
+  while (dspico_card_is_busy())
+  {
+  }
+  Card_UnlockRom(s_reserved_lock_id);
   return true;
 }
 
@@ -114,36 +124,25 @@ static bool uplink_local_write_block(const uint8_t *src, uint32_t valid)
   {
     valid = 512;
   }
-  uint16_t lock = dspico_card_lock_wait_persistent();
-  if (lock == DSPICO_LOCK_ID_INVALID)
-  {
-    uplink_card_lock_skips++;
-    return false;
-  }
+  Card_LockRom(s_reserved_lock_id);
   dspico_card_set_cmd(DSPICO_CMD_USB_WRITE_DATA(0, UPLINK_LOCAL_TX_EP, 1, valid));
   dspico_card_start_xfer(DSPICO_USB_WRITE_DATA_SETTINGS, false);
   dspico_card_cpu_write(src, 512 / 4, valid);
-  dspico_card_lock_release_persistent(lock);
+  Card_UnlockRom(s_reserved_lock_id);
   return true;
 }
 
 // Read a 512-byte block of host bytes from the firmware RX ring into dst
 // (zero-filled by the firmware when the ring is empty). Returns false
-// when the transaction was skipped (card lock unavailable or card bus
-// dead); the contents of dst are then undefined.
-static bool uplink_local_read_rx(uint8_t *dst)
+// when the transaction was skipped (card lock unavailable).
+static void uplink_local_read_rx(uint8_t *dst)
 {
-  uint16_t lock = dspico_card_lock_wait_persistent();
-  if (lock == DSPICO_LOCK_ID_INVALID)
-  {
-    uplink_card_lock_skips++;
-    return false;
-  }
+  Card_LockRom(s_reserved_lock_id);
   dspico_card_set_cmd(DSPICO_CMD_USB_READ_DATA(0, UPLINK_LOCAL_RX_EP));
   dspico_card_start_xfer(DSPICO_USB_READ_DATA_SETTINGS, false);
+  // TODO: wait should we loop for dspico_card_is_busy here?
   dspico_card_cpu_read(dst, 512 / 4);
-  dspico_card_lock_release_persistent(lock);
-  return !dspico_card_is_dead();
+  Card_UnlockRom(s_reserved_lock_id);
 }
 
 //--------------------------------------------------------------------+
@@ -529,19 +528,12 @@ static void uplink_cmd_clear(void)
 // cleanly when the lock is unavailable or the card dies mid-frame.
 static void uplink_stream_frame(void)
 {
-  uint16_t lock = dspico_card_lock_wait_persistent();
-  if (lock == DSPICO_LOCK_ID_INVALID)
-  {
-    uplink_card_lock_skips++;
-    uplink_frames_dropped++;
-    return;
-  }
+  Card_LockRom(s_reserved_lock_id);
   if (!uplink_sampler_frame_start())
   {
-    dspico_card_lock_release_persistent(lock);
+    Card_UnlockRom(s_reserved_lock_id);
     return;
   }
-  bool ok = true;
   for (;;)
   {
     uint32_t n = uplink_sampler_frame_fill(s_block_buf, sizeof(s_block_buf));
@@ -552,22 +544,9 @@ static void uplink_stream_frame(void)
     dspico_card_set_cmd(DSPICO_CMD_USB_WRITE_DATA(0, UPLINK_LOCAL_TX_EP, 1, (uint16_t)n));
     dspico_card_start_xfer(DSPICO_USB_WRITE_DATA_SETTINGS, false);
     dspico_card_cpu_write(s_block_buf, 512 / 4, n);
-    if (dspico_card_is_dead())
-    {
-      ok = false;
-      break;
-    }
   }
-  dspico_card_lock_release_persistent(lock);
-  if (ok)
-  {
-    uplink_frames_sent++;
-  }
-  else
-  {
-    uplink_sampler_frame_abort();
-    uplink_frames_dropped++;
-  }
+  Card_UnlockRom(s_reserved_lock_id);
+  uplink_frames_sent++;
 }
 
 //--------------------------------------------------------------------+
@@ -585,7 +564,8 @@ void UplinkInit(void)
   // Reserve the uplink's persistent card lock id (best effort: if no
   // id is free the transactions fall back to per-transaction
   // acquisition).
-  (void)dspico_card_lock_reserve();
+  //(void)dspico_card_lock_reserve();
+  ReserveDSPicoLockID();
 
   // Hand USB enumeration over to the DSpico firmware: its local TinyUSB
   // stack (usb_cdc_bridge.c) initializes the RP2040 SIE and pulls up D+.
@@ -606,7 +586,7 @@ void UplinkPoll(void)
 {
   // Once the card bus wedged and was force-aborted, never touch it again:
   // the game keeps running, just without USB streaming.
-  if (!s_inited || dspico_card_is_dead())
+  if (!s_inited)
   {
     return;
   }
@@ -629,49 +609,35 @@ void UplinkPoll(void)
     uplink_stream_frame();
   }
 
-  // 2. Host commands, every ~15 frames (~250 ms) — ALWAYS, including
-  //    during config uploads. The rate must not be raised: every 0xEA
-  //    read makes the firmware's RX handler do its heavy prep (ring
-  //    drain + 512-byte memset) inside the card IRQ, and 60 reads/s
-  //    (15x the validated rate) turned every upload into a card-bus
-  //    wedge lottery — one lost prep race marks the bus dead and the
-  //    uplink never recovers (the reader then fails every retry).
-  //    ~250 ms round trips are well within the reader's 2 s ACK timeouts.
-  //
-  //    EDIT: this comment may be incorrect, testing without
-  // if (++s_poll_cnt >= UPLINK_LOCAL_POLL_EVERY)
-  //{
+  // 2. Host commands
   s_poll_cnt = 0;
-  if (uplink_local_read_rx(s_block_buf))
+  uplink_local_read_rx(s_block_buf);
+  // Quick reject: an all-zero block is an empty RX ring (the
+  // firmware zero-fills); skip the parser entirely.
+  bool any = false;
+  for (uint32_t i = 0; i < sizeof(s_block_buf); i++)
   {
-    // Quick reject: an all-zero block is an empty RX ring (the
-    // firmware zero-fills); skip the parser entirely.
-    bool any = false;
-    for (uint32_t i = 0; i < sizeof(s_block_buf); i++)
+    if (s_block_buf[i] != 0)
     {
-      if (s_block_buf[i] != 0)
-      {
-        any = true;
-        break;
-      }
+      any = true;
+      break;
     }
-    if (any)
+  }
+  if (any)
+  {
+    if (uplink_cmd_feed(s_block_buf, sizeof(s_block_buf)))
     {
-      if (uplink_cmd_feed(s_block_buf, sizeof(s_block_buf)))
-      {
-        s_config_watchdog = 0; // host activity
-      }
+      s_config_watchdog = 0; // host activity
     }
-    else if (s_config_active)
-    {
-      // Host reachable but silent: only THIS counts against the config
-      // watchdog. When the read itself fails (the game holds the card
-      // during saves/loading screens), the watchdog must freeze — the
-      // host is waiting patiently and the config must survive until
-      // the game frees up.
-      s_config_watchdog++;
-    }
-    //}
+  }
+  else if (s_config_active)
+  {
+    // Host reachable but silent: only THIS counts against the config
+    // watchdog. When the read itself fails (the game holds the card
+    // during saves/loading screens), the watchdog must freeze — the
+    // host is waiting patiently and the config must survive until
+    // the game frees up.
+    s_config_watchdog++;
   }
 
   // 3. Config watchdog: abort a config the host ABANDONED (reachable

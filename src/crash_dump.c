@@ -437,16 +437,8 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
   // first card write perturbs it.
   CapturePreLockState(n_slots);
 
-  // Bounded-wait section entry: the dump must never block behind a wedged
-  // mod section (that is exactly when the dump is needed), so give up the
-  // mutex after the timeout and proceed without it - the shared CARD id
-  // still re-enters the lock (see EepromTryLock), which is safe here because
-  // the hook path halts the game regardless. No valid CARD lock id at all
-  // (OS_GetLockID exhausted) means the dump cannot be written safely - skip
-  // it rather than corrupt EEPROM mid-write.
-  if (!EepromTryLock(CRASH_DUMP_LOCK_WAIT_MS)) {
-    return;
-  }
+  int extern_eeprom_lock_id = GetEepromLockId();
+  Card_LockBackup(extern_eeprom_lock_id);
   // Clear the complete flag first: an interrupted write of this record must
   // not be mistaken for a complete one (a previous dump may have left a 1).
   uint32_t flag = 0;
@@ -504,7 +496,7 @@ static void CrashDumpEmit(uint32_t hook_id, const uint32_t *regs,
   // The record is only complete once this lands.
   flag = 1;
   Card_WriteAndVerifyEeprom(CRASH_DUMP_EEPROM_BASE + CRASH_DUMP_OFF_COMPLETE, &flag, 4);
-  EepromUnlock();
+  Card_UnlockBackup(extern_eeprom_lock_id);
 }
 
 void CrashDumpWrite(uint32_t hook_id, const uint32_t *regs, uint32_t sp_base)
@@ -566,22 +558,13 @@ void CrashDumpTrigger(void)
                 (uint32_t)raw_buttons[0] | ((uint32_t)raw_buttons[1] << 8));
 }
 
-// Watchdog: polls every frame (it sleeps on the mod wake queue and is woken
-// from the VCount 0 hook like the other mod threads) and dumps all thread
-// stacks when the combo is held. This turns hangs (infinite loops, deadlocks)
-// that never reach FatalError/OS_Panic into a diagnosable record. The game is
-// left running afterwards; crash_dump_active makes the combo fire only once.
-void CrashDumpWatchdogRoutine(void *arg)
+void CheckIfShouldCrashDump(void *arg)
 {
-  while (true)
+  struct held_buttons held_buttons;
+  GetHeldButtons(0, (void *)&held_buttons);
+  if (held_buttons.l && held_buttons.r && held_buttons.x && held_buttons.y)
   {
-    struct held_buttons held_buttons;
-    GetHeldButtons(0, (void *)&held_buttons);
-    if (held_buttons.l && held_buttons.r && held_buttons.x && held_buttons.y)
-    {
-      CrashDumpTrigger();
-      OS_ResetSystem(1);
-    }
-    OS_SleepThread(&mod_wake_queue);
+    CrashDumpTrigger();
+    OS_ResetSystem(1);
   }
 }

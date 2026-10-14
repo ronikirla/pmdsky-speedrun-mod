@@ -134,8 +134,7 @@ uint32_t OS_GetProcMode(void);    // 0x0207BBE0
 void dspico_card_set_cmd(uint64_t cmd);
 // Kicks off a ROM transaction with the given MCCNT1 settings
 void dspico_card_start_xfer(uint32_t settings, bool irq);
-bool dspico_card_is_busy(void); // MCCNT1 bit 31
-void dspico_card_wait_busy(void);
+bool dspico_card_is_busy(void);       // MCCNT1 bit 31
 bool dspico_card_is_data_ready(void); // MCCNT1 bit 23
 uint32_t dspico_card_get_data(void);  // read REG_MCD1
 // Uplink calls this before a reset. Afterwards lock_wait always returns 0.
@@ -150,42 +149,3 @@ void dspico_card_set_shutdown(bool shutdown);
 // double buffer; the remainder must be well-formed, not OOB garbage).
 void dspico_card_cpu_read(void *dst, uint32_t words);
 void dspico_card_cpu_write(const void *src, uint32_t words, uint32_t valid_bytes);
-
-//--------------------------------------------------------------------+
-// Card-bus watchdog
-//--------------------------------------------------------------------+
-
-// True once a card transaction exceeded DSPICO_BUSY_SPINS and was
-// force-aborted (MCCNT1 ENABLE cleared). The uplink must stop issuing card
-// transactions for the rest of the session; the game keeps running without
-// USB streaming.
-bool dspico_card_is_dead(void);
-
-//--------------------------------------------------------------------+
-// Locked wrappers (safe to call from the uplink thread)
-//--------------------------------------------------------------------+
-
-// Acquire the game card lock. Returns the lock id, or 0 if no lock was
-// available (caller must skip the operation).
-// uint16_t dspico_card_lock_acquire(void);
-void dspico_card_lock_release(uint16_t lock_id);
-
-// Waits for a free lock id (bounded by DSPICO_LOCK_ID_SPINS attempts).
-// Returns the lock id, or DSPICO_LOCK_ID_INVALID if none became free
-// (caller must skip the operation).
-uint16_t dspico_card_lock_wait(void);
-
-// Persistent lock id for the uplink: reserved once (UplinkInit) and
-// never returned to the game's free list, so the id can never be
-// handed out to the game's own card transactions (saves, R4, ...),
-// which cycle ids per operation. Best effort: returns true when an
-// id could be reserved.
-bool dspico_card_lock_reserve(void);
-// Like dspico_card_lock_wait(), but uses the reserved id when one has
-// been reserved; falls back to per-transaction acquisition otherwise.
-// Returns DSPICO_LOCK_ID_INVALID when the bus is dead or no lock id could
-// be acquired (caller must skip the operation).
-uint16_t dspico_card_lock_wait_persistent(void);
-// dspico_card_lock_release() for the reserved id: unlocks the card but
-// keeps the id out of the game's free list.
-void dspico_card_lock_release_persistent(uint16_t lock_id);
