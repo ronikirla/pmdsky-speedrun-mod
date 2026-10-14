@@ -47,17 +47,16 @@ static uint16_t s_declared_count; // count declared by CONFIG_BEGIN
 static uint16_t s_epoch;
 static uint32_t s_seq;
 
-// Frame writer state (one frame at a time; pull model)
+// Frame writer state. A frame is built atomically in ONE frame_fill call
+// (with UPLINK_MAX_SAMPLES = 120 the longest frame is 498 bytes, so it
+// always fits the caller's 512-byte scratch): no incremental emission, no
+// per-byte position tracking, no completion constant — the checksum is
+// written directly from the final sum. (The previous incremental writer's
+// completion check fired one byte early on hardware and silently dropped
+// the high checksum byte; building the whole frame removes that entire
+// class of bug.) The flag only makes the caller's pull loop terminate
+// after one frame.
 static bool s_frame_active;
-static uint8_t s_frame_hdr[UPLINK_FRAME_HEADER_LEN]; // prebuilt at start
-static uint16_t s_frame_pos;                         // byte position within the frame
-// Running checksum over the emitted bytes. u32 ON PURPOSE: the on-device
-// frames showed the low checksum byte correct but the high byte always 0
-// (stored 0x00BB vs true sum 0x05BB) — an 8-bit-effective accumulator. A
-// u32 accumulator with explicit masked emission cannot truncate.
-static uint32_t s_frame_sum;
-static uint32_t s_frame_sample; // sample currently being emitted
-static uint16_t s_frame_loaded; // table index cached in s_frame_sample
 
 // Store a little-endian u32 at p
 static void put_le32(uint8_t *p, uint32_t v)
@@ -265,88 +264,87 @@ bool uplink_sampler_frame_start(void)
     return false;
   }
   s_frame_active = true;
-  // Header: magic, seq, game_frame, sample_count, epoch (little-endian)
-  s_frame_hdr[0] = 'P';
-  s_frame_hdr[1] = 'M';
-  put_le32(s_frame_hdr + 2, s_seq);
-  put_le32(s_frame_hdr + 6,
-           (uint32_t)PLAY_TIME_SECONDS * 60u + PLAY_TIME_FRAME_COUNTER);
-  s_frame_hdr[10] = (uint8_t)s_entry_count;
-  s_frame_hdr[11] = (uint8_t)(s_entry_count >> 8);
-  s_frame_hdr[12] = (uint8_t)s_epoch;
-  s_frame_hdr[13] = (uint8_t)(s_epoch >> 8);
-  s_frame_pos = 0;
-  s_frame_sum = 0;
-  s_frame_loaded = 0xFFFFu;
   return true;
 }
 
-// Emit the next byte of the current frame and fold it into the checksum.
-static uint8_t frame_next_byte(void)
-{
-  uint8_t b;
-  uint16_t pos = s_frame_pos;
-  uint16_t samples_end = (uint16_t)(UPLINK_FRAME_HEADER_LEN + 4u * s_entry_count);
-  if (pos < UPLINK_FRAME_HEADER_LEN)
-  {
-    b = s_frame_hdr[pos]; // header prebuilt at frame start
-  }
-  else if (pos < samples_end)
-  {
-    // Samples: evaluate one entry, emit its 4 bytes little-endian
-    uint16_t off = (uint16_t)(pos - UPLINK_FRAME_HEADER_LEN);
-    uint16_t idx = (uint16_t)(off >> 2);
-    if (idx != s_frame_loaded)
-    {
-      s_frame_sample = eval_entry(&s_table[idx]);
-      s_frame_loaded = idx;
-    }
-    b = (uint8_t)(s_frame_sample >> ((off & 3u) * 8u));
-  }
-  else if (pos == samples_end)
-  {
-    // b = 0x98;
-    b = (uint8_t)(s_frame_sum & 0xFFu);
-  }
-  else
-  {
-    // b = 0x99;
-    b = (uint8_t)((s_frame_sum >> 8) & 0xFFu);
-  }
-
-  // The checksum bytes themselves are not part of the checksum; folding
-  // them would corrupt the high byte (emitted after the low one).
-  if (pos < samples_end)
-  {
-    s_frame_sum += b;
-  }
-  s_frame_pos++;
-  if (s_frame_pos >= (uint16_t)(samples_end + 3u))
-  {
-    // Frame complete: publish the seq (an aborted frame never gets here,
-    // so it leaves no gap in the host's seq stream).
-    s_frame_active = false;
-    s_seq++;
-  }
-  return b;
-}
-
+// Build the complete frame into dst and return its length
+// (UPLINK_FRAME_HEADER_LEN + 4*entry_count + 2). The next call returns 0
+// (frame consumed), which terminates the caller's pull loop. The seq
+// counter increments here — a frame dropped before this point consumes
+// no seq and leaves no gap in the host's seq stream.
 uint32_t uplink_sampler_frame_fill(uint8_t *dst, uint32_t dst_len)
 {
   if (!s_frame_active)
   {
     return 0;
   }
-  uint32_t n = 0;
-  while (n < dst_len && s_frame_active)
+  uint16_t n = s_entry_count;
+  uint16_t frame_len = (uint16_t)(UPLINK_FRAME_HEADER_LEN + 4u * n + 2u);
+  if (dst_len < frame_len)
   {
-    dst[n++] = frame_next_byte();
+    // Cannot happen with the 512-byte scratch (max frame 498 bytes);
+    // drop the frame rather than ship a truncated one.
+    s_frame_active = false;
+    return 0;
   }
-  return n;
+
+  // Header: magic, seq, game_frame, sample_count, epoch, reserved
+  dst[0] = 'P';
+  dst[1] = 'M';
+  put_le32(dst + 2, s_seq);
+  put_le32(dst + 6,
+           (uint32_t)PLAY_TIME_SECONDS * 60u + PLAY_TIME_FRAME_COUNTER);
+  dst[10] = (uint8_t)n;
+  dst[11] = (uint8_t)(n >> 8);
+  dst[12] = (uint8_t)s_epoch;
+  dst[13] = (uint8_t)(s_epoch >> 8);
+  dst[14] = 0;
+  dst[15] = 0;
+
+  // Samples (little-endian u32 each) folded into the checksum
+  uint32_t sum = 0;
+  for (uint16_t i = 0; i < n; i++)
+  {
+    uint32_t v = eval_entry(&s_table[i]);
+    uint8_t *p = dst + UPLINK_FRAME_HEADER_LEN + 4u * i;
+    p[0] = (uint8_t)v;
+    p[1] = (uint8_t)(v >> 8);
+    p[2] = (uint8_t)(v >> 16);
+    p[3] = (uint8_t)(v >> 24);
+    sum += p[0];
+    sum += p[1];
+    sum += p[2];
+    sum += p[3];
+  }
+  // Header bytes are part of the checksum too
+  for (uint16_t i = 0; i < UPLINK_FRAME_HEADER_LEN; i++)
+  {
+    sum += dst[i];
+  }
+
+  // Checksum: byte sum of everything before it (u16 wrap); the checksum
+  // bytes themselves are not part of it.
+  dst[frame_len - 2] = (uint8_t)(sum & 0xFFu);
+  dst[frame_len - 1] = (uint8_t)((sum >> 8) & 0xFFu);
+
+  // Sacrificial trailing byte. The card->firmware->USB transport
+  // consistently loses the LAST byte of each transaction's valid payload
+  // (v1 absorbed this invisibly: its 70-byte frames ended with 2 padding
+  // bytes after the checksum). Without a sacrificial byte the frame's
+  // high checksum byte IS the last byte and gets replaced by 00 on the
+  // wire (seen on device: stored=0x00AE vs expected=0x01AE). The reader
+  // parses frames by magic + declared length, so the extra byte is
+  // skipped as inter-frame garbage; the frame layout itself is unchanged.
+  dst[frame_len] = dst[frame_len - 1];
+
+  s_frame_active = false;
+  s_seq++;
+  return frame_len + 1u;
 }
 
 void uplink_sampler_frame_abort(void)
 {
+  // Frames are built atomically; nothing to unwind.
   s_frame_active = false;
 }
 

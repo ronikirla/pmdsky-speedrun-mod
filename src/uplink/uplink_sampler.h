@@ -11,7 +11,8 @@
 //   [6..9]   game_frame    PLAY_TIME (seconds*60 + frames) at sample time
 //   [10..11] sample_count  entry count N (reader self-synchronizes)
 //   [12..13] epoch         bumped on every CONFIG_COMMIT
-//   [14..]   samples[N]    little-endian u32 (narrow reads zero-extended;
+//   [14..15] reserved      zero
+//   [16..]   samples[N]    little-endian u32 (narrow reads zero-extended;
 //                          failed pointer checks sample as 0)
 //   [L-2..L-1] checksum    byte sum of everything before it (u16 wrap)
 //
@@ -107,14 +108,19 @@ uint16_t uplink_sampler_epoch(void);
 // Frame streaming (pull model; uplink.c ships each chunk)
 //--------------------------------------------------------------------+
 
-// Begin building one frame. Returns false when there is nothing to stream
-// (no committed table) or a previous frame is still unfinished.
+// Begin one frame: returns false when there is nothing to stream (no
+// committed table) or the previous frame was not consumed yet.
 bool uplink_sampler_frame_start(void);
 
-// Write the next chunk of the current frame into dst (up to dst_len
-// bytes). Returns the number of bytes written; 0 when the frame is
-// complete. The seq counter increments when the last byte is emitted (an
-// aborted frame therefore consumes no seq and leaves no gap on the wire).
+// Build the COMPLETE frame into dst (it always fits the 512-byte scratch:
+// max = 16 + 4*UPLINK_MAX_SAMPLES + 2 frame bytes + 1 sacrificial byte =
+// 499 bytes) and return the number of bytes to ship: frame length + 1.
+// The extra trailing byte is a duplicate of the checksum's high byte; the
+// transport loses the last byte of each transaction's payload (v1 absorbed
+// this with 2 trailing pad bytes), so the sacrifice keeps the real
+// checksum intact on the wire. The next call returns 0, which terminates
+// the caller's pull loop. The seq counter increments when the frame is
+// built (a frame dropped before that consumes no seq).
 uint32_t uplink_sampler_frame_fill(uint8_t *dst, uint32_t dst_len);
 
 // Abandon the current frame (e.g. the card died mid-frame). No seq is

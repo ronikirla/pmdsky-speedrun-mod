@@ -31,9 +31,9 @@ struct thread vblank_routine_thread;
 struct thread main_routine_thread;
 
 uint64_t watchdog_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
-// 1KB is enough for the vblank routine: its whole call graph (CalculateFPS /
-// UpdateAPSIdleTime) uses only small HUD_LEN char buffers plus static arrays.
-// The 2KB saved here keeps the code+data+bss region within its linker length.
+//  1KB is enough for the vblank routine: its whole call graph (CalculateFPS /
+//  UpdateAPSIdleTime) uses only small HUD_LEN char buffers plus static arrays.
+//  The 2KB saved here keeps the code+data+bss region within its linker length.
 uint64_t vblank_routine_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
 // 2KB: the USB uplink rewrite (protocol v2) removed its ~1.1KB of stack
 // buffers (two 512-byte card-phase buffers nested under UplinkPoll), which

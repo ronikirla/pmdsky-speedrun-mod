@@ -69,7 +69,7 @@ skipped is dropped; the host's timeouts recover):
 | `OK STREAMING epoch=<E>` | CONFIG_COMMIT accepted; sampling auto-starts. Sent **before** the first frame so it does not compete with the frame flood; COMMIT is idempotently re-ackable (see below) |
 | `OK ABORTED` | CONFIG_ABORT accepted (table discarded) |
 | `ERR <REASON>` | command rejected; the whole config is discarded and the mod returns to idle |
-| `UPLINK seq=<S> sent=<T> drop=<D> stack=<U> rx=<R> cfg=<A>/<N>` | PING reply: frame counters, main-thread stack usage in bytes, `R` = total nonzero host bytes ever parsed, `A`/`N` = applied/declared config entries. Diagnostics: after a failed upload, `rx` shows whether the mod ever received the entry bytes and `cfg` how far its table got |
+| `UPLINK seq=<S> sent=<T> drop=<D> stack=<U> rx=<R> cfg=<A>/<N>` | PING reply: frame counters, main-thread stack usage in bytes, `R` = total nonzero host bytes ever parsed, `A`/`N` = applied/declared config entries. Diagnostics: after a failed upload, `rx` shows whether the mod ever received the entry bytes and `cfg` how far its table got. **Also sent once unsolicited at boot (the greeting)** — see 2.2 |
 
 `ERR <REASON>` values:
 
@@ -168,18 +168,22 @@ host: CONFIG_COMMIT                  mod: OK STREAMING epoch=E
   skipped (the card lock may be busy the moment streaming starts), so the
   host **re-sends COMMIT** on timeout instead of restarting: the mod
   re-acks idempotently whenever its table is already complete
-  (applied == declared), without changing state. If the COMMIT re-sends
-  are exhausted, the host does **not** restart (CONFIG_ABORT would
-  discard a table that is very likely applied and streaming); instead it
-  sends a **PING** and decides from the reply's `cfg=A/N` field:
-  `A == N` → the upload is complete (the mod committed and is streaming;
-  the OK STREAMING reply was simply lost). `A < N` → the table is
-  incomplete, restart. A **valid sample frame** whose sample_count equals
-  the configured count is also accepted as commit confirmation (the mod
-  streams only with a committed table and streams nothing while a config
-  is in progress). During the upload the mod polls
-  RX every frame (see 2.4), so a full batch is almost always delivered
-  between two polls and round trips are ~1-2 frames (~16-33 ms).
+  (applied == declared), without changing state. A **valid sample frame**
+  whose sample_count equals the configured count is also accepted as
+  commit confirmation (the mod streams only with a committed table and
+  streams nothing while a config is in progress).
+- **Patient uploads (no attempt caps).** The game can be busy (saves,
+  loading screens) and unable to service USB for a long time, so the host
+  never gives up after a fixed number of tries: every step (CONFIG_BEGIN,
+  the current CONFIG_ENTRY, CONFIG_COMMIT, a diagnostic PING) is
+  **idempotent** on the mod side and is re-sent **indefinitely** on
+  timeout, with a gentle backoff (700 ms → ~2 s after a few resends) to
+  limit firmware RX-ring pressure. Resends never discard progress; the
+  only destructive operation (CONFIG_ABORT + fresh CONFIG_BEGIN) happens
+  when the host sees **no device reply at all for ~20 s** despite resends
+  (lost BEGIN, index gap, transport loss) or on an `ERR` reply (transient
+  causes, e.g. an index gap after RX-ring overflow; 5 consecutive ERRs
+  give up with the reason).
 - On any `ERR` (or a timeout) the host restarts from CONFIG_BEGIN; the mod
   has already discarded the partial table. Before CONFIG_BEGIN the host
   sends CONFIG_ABORT and waits ~400 ms: the abort silently discards any
@@ -187,8 +191,28 @@ host: CONFIG_COMMIT                  mod: OK STREAMING epoch=E
   RX poll (~250 ms) to drain stale bytes still in its ring — stale entry
   bytes applied to the fresh table would otherwise fail every retry with
   `ERR IDX`.
-- The mod aborts a stalled config silently: ~2 s (120 frames) without any
-  host bytes returns it to idle.
+- The mod aborts a config the host **abandoned**: ~2 s (120 frames) of
+  successful-but-empty RX reads (host reachable but silent) return it to
+  idle. A busy game that makes the RX reads FAIL does **not** advance the
+  watchdog — the config survives until the game frees up, matching the
+  host's patient resends.
+- **Boot greeting / soft-reset recovery:** the mod sends **one unsolicited
+  `UPLINK ...` status line** right after its uplink comes up (retried on
+  later frames until the card write goes out). A reader that stayed
+  connected through a soft reset receives it, sees `cfg=0/0` (the table
+  was wiped) and **re-uploads immediately** — recovery takes ~3-4 s
+  (mod reboot + greeting + upload) instead of waiting out the host's
+  silence watchdog. The host treats any `UPLINK` line whose `cfg=A/N`
+  does not match its config as "the mod's table changed under us" and
+  re-uploads; a matching `cfg` while streaming is a no-op (the greeting's
+  counters are just diagnostics).
+- **Reconnect skip:** on a reconnect the host first sends PING; if the
+  reply's `cfg=A/N` matches the host's config (`A == N == count`), the
+  mod still has the table applied and is streaming — the host skips the
+  upload entirely. A soft reset clears the mod's table (`cfg=0/0`), so
+  the next connect uploads again. The first connect of a reader session
+  always uploads (the address file may have been edited while the reader
+  was closed).
 - CONFIG_BEGIN while streaming (or mid-config) restarts the configuration.
 - CONFIG_ABORT discards the table entirely (a previously streaming table
   does not survive an abort; the host re-uploads).

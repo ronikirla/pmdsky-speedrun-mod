@@ -54,6 +54,8 @@ static uint16_t s_entries_this_feed = 0;
 // distinguishes "the mod never saw the batch" from "saw it but did not
 // process it" when an upload fails).
 static uint32_t s_rx_bytes = 0;
+// Set once the boot greeting has been sent (see UplinkInit).
+static bool s_greeted = false;
 
 static void uplink_cmd_clear(void);
 
@@ -148,9 +150,12 @@ static bool uplink_local_read_rx(uint8_t *dst)
 // Control replies (ASCII lines, shipped immediately; best-effort)
 //--------------------------------------------------------------------+
 
-static void uplink_reply_send(const uint8_t *data, uint32_t len)
+// Returns false when the transaction was skipped (card lock unavailable
+// or card bus dead); the reply is then NOT shipped and the caller may
+// retry later (the boot greeting does).
+static bool uplink_reply_send(const uint8_t *data, uint32_t len)
 {
-  (void)uplink_local_write_block(data, len); // dropped on failure; host timeouts recover
+  return uplink_local_write_block(data, len);
 }
 
 // Small reply builder: text pieces and u32 values, CRLF-terminated.
@@ -180,14 +185,14 @@ static void reply_add_u32(struct uplink_reply *r, uint32_t v)
   }
 }
 
-static void reply_send(struct uplink_reply *r)
+static bool reply_send(struct uplink_reply *r)
 {
   if (r->len <= sizeof(r->buf) - 2)
   {
     r->buf[r->len++] = '\r';
     r->buf[r->len++] = '\n';
   }
-  uplink_reply_send(r->buf, r->len);
+  return uplink_reply_send(r->buf, r->len);
 }
 
 static void uplink_send_err(const char *reason)
@@ -196,6 +201,32 @@ static void uplink_send_err(const char *reason)
   reply_add_str(&r, "ERR ");
   reply_add_str(&r, reason);
   reply_send(&r);
+}
+
+// The UPLINK status line (PING reply format): seq/sent/drop counters,
+// main-thread stack usage, rx byte counter and cfg=<applied>/<declared>.
+// Sent as a PING reply AND once unsolicited at boot (the greeting) so a
+// still-connected reader learns that the table was wiped and re-uploads
+// immediately instead of waiting out its silence watchdog. Returns false
+// when the write was skipped (the greeting caller then retries).
+static bool uplink_send_status(void)
+{
+  struct uplink_reply r = {.len = 0};
+  reply_add_str(&r, "UPLINK seq=");
+  reply_add_u32(&r, uplink_sampler_get_seq());
+  reply_add_str(&r, " sent=");
+  reply_add_u32(&r, uplink_frames_sent);
+  reply_add_str(&r, " drop=");
+  reply_add_u32(&r, uplink_frames_dropped);
+  reply_add_str(&r, " stack=");
+  reply_add_u32(&r, mod_main_stack_used);
+  reply_add_str(&r, " rx=");
+  reply_add_u32(&r, s_rx_bytes);
+  reply_add_str(&r, " cfg=");
+  reply_add_u32(&r, uplink_sampler_staging_count());
+  reply_add_str(&r, "/");
+  reply_add_u32(&r, uplink_sampler_declared_count());
+  return reply_send(&r);
 }
 
 //--------------------------------------------------------------------+
@@ -288,25 +319,8 @@ static bool uplink_handle_host_command(uint8_t const *buf, uint16_t len)
     uplink_sampler_frame_abort();
     break;
   case UPLINK_CMD_PING:
-  {
-    struct uplink_reply r = {.len = 0};
-    reply_add_str(&r, "UPLINK seq=");
-    reply_add_u32(&r, uplink_sampler_get_seq());
-    reply_add_str(&r, " sent=");
-    reply_add_u32(&r, uplink_frames_sent);
-    reply_add_str(&r, " drop=");
-    reply_add_u32(&r, uplink_frames_dropped);
-    reply_add_str(&r, " stack=");
-    reply_add_u32(&r, mod_main_stack_used);
-    reply_add_str(&r, " rx=");
-    reply_add_u32(&r, s_rx_bytes);
-    reply_add_str(&r, " cfg=");
-    reply_add_u32(&r, uplink_sampler_staging_count());
-    reply_add_str(&r, "/");
-    reply_add_u32(&r, uplink_sampler_declared_count());
-    reply_send(&r);
+    uplink_send_status();
     break;
-  }
   case UPLINK_CMD_CONFIG_BEGIN:
     // (Re)configuration is allowed any time; it resets the staging area.
     uplink_config_begin(buf[1], (uint16_t)(buf[2] | ((uint16_t)buf[3] << 8)));
@@ -597,6 +611,17 @@ void UplinkPoll(void)
     return;
   }
 
+  // 0. Boot greeting: one unsolicited UPLINK status line right after the
+  //    uplink came up (deferred from UplinkInit so the card lock is
+  //    available). A reader that stayed connected through a soft reset
+  //    receives it, sees cfg=0/0 (table wiped) and re-uploads
+  //    immediately — no silence-watchdog wait. Retried on later frames
+  //    until the write actually goes out (the lock may be busy).
+  if (!s_greeted && uplink_send_status())
+  {
+    s_greeted = true;
+  }
+
   // 1. Stream one sample frame (when configured, started and idle of
   //    config). Frames flow only with a committed, non-empty table.
   if (s_sampling && !s_config_active && uplink_sampler_entry_count() > 0)
@@ -612,36 +637,49 @@ void UplinkPoll(void)
   //    wedge lottery — one lost prep race marks the bus dead and the
   //    uplink never recovers (the reader then fails every retry).
   //    ~250 ms round trips are well within the reader's 2 s ACK timeouts.
-  if (++s_poll_cnt >= UPLINK_LOCAL_POLL_EVERY)
+  //
+  //    EDIT: this comment may be incorrect, testing without
+  // if (++s_poll_cnt >= UPLINK_LOCAL_POLL_EVERY)
+  //{
+  s_poll_cnt = 0;
+  if (uplink_local_read_rx(s_block_buf))
   {
-    s_poll_cnt = 0;
-    if (uplink_local_read_rx(s_block_buf))
+    // Quick reject: an all-zero block is an empty RX ring (the
+    // firmware zero-fills); skip the parser entirely.
+    bool any = false;
+    for (uint32_t i = 0; i < sizeof(s_block_buf); i++)
     {
-      // Quick reject: an all-zero block is an empty RX ring (the
-      // firmware zero-fills); skip the parser entirely.
-      bool any = false;
-      for (uint32_t i = 0; i < sizeof(s_block_buf); i++)
+      if (s_block_buf[i] != 0)
       {
-        if (s_block_buf[i] != 0)
-        {
-          any = true;
-          break;
-        }
-      }
-      if (any)
-      {
-        if (uplink_cmd_feed(s_block_buf, sizeof(s_block_buf)))
-        {
-          s_config_watchdog = 0; // host activity
-        }
+        any = true;
+        break;
       }
     }
+    if (any)
+    {
+      if (uplink_cmd_feed(s_block_buf, sizeof(s_block_buf)))
+      {
+        s_config_watchdog = 0; // host activity
+      }
+    }
+    else if (s_config_active)
+    {
+      // Host reachable but silent: only THIS counts against the config
+      // watchdog. When the read itself fails (the game holds the card
+      // during saves/loading screens), the watchdog must freeze — the
+      // host is waiting patiently and the config must survive until
+      // the game frees up.
+      s_config_watchdog++;
+    }
+    //}
   }
 
-  // 3. Config watchdog: abort a stalled configuration silently.
+  // 3. Config watchdog: abort a config the host ABANDONED (reachable
+  //    but silent — see the increment site above). A busy game freezing
+  //    the reads does NOT advance it.
   if (s_config_active)
   {
-    if (++s_config_watchdog >= UPLINK_CONFIG_WATCHDOG_FRAMES)
+    if (s_config_watchdog >= UPLINK_CONFIG_WATCHDOG_FRAMES)
     {
       uplink_config_abort_silent();
     }
