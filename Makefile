@@ -74,13 +74,6 @@ CFLAGS	:=	-g -Wall $(OPT_LEVEL) $(RELEASE_CONFIG) $(SP_EFFECT_COMPAT) \
 
 CFLAGS	+=	$(INCLUDE) -DARM9
 
-# The mod region is hard-capped (linker.ld: 0x8010 bytes) and nearly full.
-# The uplink is card-I/O bound (code size matters more than speed there),
-# so its objects are compiled -Os to buy room for the sample table.
-# GCC uses the last -O flag, so this overrides the -O2 above.
-uplink.o: CFLAGS += -Os
-uplink_sampler.o: CFLAGS += -Os
-
 # Those are to be set by command line arguments.
 CFLAGS  +=  $(EXTRA_CFLAGS)
 
