@@ -1,220 +1,356 @@
 #include "uplink_sampler.h"
 
-// Game RAM + mod globals used by the default sample table. They are
-// re-declared here (instead of including pmdsky.h) with types that exactly
-// match their definitions, because this translation unit must stay
-// compatible with the standard fixed-width types (pmdsky.h self-defines
-// conflicting typedefs and a bool macro).
+// Game RAM play-time globals used for the frame's game_frame field. They
+// are re-declared here (instead of including pmdsky.h) with types that
+// exactly match their definitions, because this translation unit must
+// stay compatible with the standard fixed-width types (pmdsky.h
+// self-defines conflicting typedefs and a bool macro).
 //   PLAY_TIME_SECONDS / PLAY_TIME_FRAME_COUNTER: pmdsky data/ram.h
 //     (EU 0x022ABFD4 / 0x022ABFD8, resolved via the linker script)
 extern unsigned int PLAY_TIME_SECONDS;
 extern unsigned char PLAY_TIME_FRAME_COUNTER;
 
-// Fixed EU (0x02xxxxxx) game-memory addresses for the default sample table.
-// (The mod docs list the short forms, e.g. 0x2ABFD8 == 0x022ABFD8; the
-// dungeon_ptr value 0x02354138 was cross-checked against the DUNGEON_PTR
-// symbol in the debug headers.)
-#define ADDR_SCENARIO_MAIN_FLAG_MAIN 0x022ABAA8u
-#define ADDR_SCENARIO_MAIN_FLAG_SUB  0x022ABAA9u
-#define ADDR_REQUEST_CLEAR_COUNT     0x022ABADBu
-#define ADDR_REQUEST_CLEAR_COUNT_U16 0x022A40E4u
-#define ADDR_MAGIC_NUMBER            0x022A3670u
-#define ADDR_OVERLAY1_START          0x02329D40u
-#define ADDR_DUNGEON_PTR             0x02354138u
-#define ADDR_SCRIPT_ID_PART1         0x02325ACAu
-#define ADDR_SCRIPT_ID_PART2         0x02325ACEu
+// ARM9 main RAM window. Requested addresses and every pointer-path
+// dereference must land here; anything else (IO, WRAM, palette memory,
+// null pointers) samples as 0 instead of being dereferenced.
+#define RAM_BASE 0x02000000u
+#define RAM_END 0x02400000u
 
-// Offsets from dungeon_ptr (see pmdsky-debug/headers/.../dungeon_mode/dungeon.h)
-#define DUNGEON_OFF_IS_CLEARING_FLOOR 0x006u
-#define DUNGEON_OFF_CURRENT_DUNGEON_ID 0x748u
-#define DUNGEON_OFF_CURRENT_FLOOR      0x749u
+// One compiled table entry: base + up to UPLINK_MAX_STEPS steps. A step
+// packs its u16 offset (<= 0x7FFF) with the dereference flag in bit 15.
+// packed: the natural layout is 14 bytes but would pad to 16; the region
+// budget is tight enough that 2 bytes/entry matter. All members stay
+// naturally aligned inside the struct, so only the array stride becomes
+// 14 (base reads turn into byte loads — a few per entry per frame).
+struct __attribute__((packed)) uplink_entry
+{
+  uint32_t base;
+  uint16_t steps[UPLINK_MAX_STEPS];
+  uint8_t width; // 1, 2 or 4
+  uint8_t nsteps;
+};
+
+//--------------------------------------------------------------------+
+// State
+//--------------------------------------------------------------------+
 
 uint32_t uplink_frames_sent = 0;
 uint32_t uplink_frames_dropped = 0;
 uint32_t uplink_card_lock_skips = 0;
 uint32_t uplink_card_lock_waits = 0;
-uint32_t uplink_card_busy_timeouts = 0;
+uint32_t uplink_card_busy_timeouts = 0; // incremented by dspico_card.c's watchdog
 
-// One sample slot. `address` is either an absolute ARM9 address (direct
-// read) or an offset from the current dungeon_ptr (via_dungeon_ptr slots).
-// `width` is the read width (1, 2 or 4); narrower values are zero-extended
-// into the u32 slot. address == 0 disables the slot.
-static struct {
-  uint32_t address;
-  uint8_t width;
-  uint8_t via_dungeon_ptr;
-} s_samples[UPLINK_SAMPLE_COUNT];
+static struct uplink_entry s_table[UPLINK_MAX_SAMPLES];
+static uint16_t s_entry_count;    // committed (streaming) entries
+static uint16_t s_staging_count;  // entries applied in the current config
+static uint16_t s_declared_count; // count declared by CONFIG_BEGIN
+static uint16_t s_epoch;
+static uint32_t s_seq;
 
-static uint32_t s_seq = 0;
+// Frame writer state (one frame at a time; pull model)
+static bool s_frame_active;
+static uint8_t s_frame_hdr[UPLINK_FRAME_HEADER_LEN]; // prebuilt at start
+static uint16_t s_frame_pos;                         // byte position within the frame
+// Running checksum over the emitted bytes. u32 ON PURPOSE: the on-device
+// frames showed the low checksum byte correct but the high byte always 0
+// (stored 0x00BB vs true sum 0x05BB) — an 8-bit-effective accumulator. A
+// u32 accumulator with explicit masked emission cannot truncate.
+static uint32_t s_frame_sum;
+static uint32_t s_frame_sample; // sample currently being emitted
+static uint16_t s_frame_loaded; // table index cached in s_frame_sample
 
-static uint8_t s_block[UPLINK_FRAMES_PER_BLOCK * UPLINK_FRAME_LEN];
-static uint32_t s_block_len = 0;
-
-static void slot_set(uint8_t index, uint32_t address, uint8_t width,
-                     uint8_t via_dungeon_ptr) {
-  s_samples[index].address = address;
-  s_samples[index].width = width;
-  s_samples[index].via_dungeon_ptr = via_dungeon_ptr;
+// Store a little-endian u32 at p
+static void put_le32(uint8_t *p, uint32_t v)
+{
+  p[0] = (uint8_t)v;
+  p[1] = (uint8_t)(v >> 8);
+  p[2] = (uint8_t)(v >> 16);
+  p[3] = (uint8_t)(v >> 24);
 }
 
-// A dungeon pointer is only dereferenced while it stays inside ARM9 WRAM
-// (0x02000000-0x023FFFFF) with margin for the largest offset below (0x749).
-static uint32_t valid_dungeon_ptr(uint32_t p) {
-  return (p >= 0x02000000u && p < 0x023F8000u) ? p : 0;
+//--------------------------------------------------------------------+
+// Memory access helpers
+//--------------------------------------------------------------------+
+
+// True when [addr, addr+len) lies inside ARM9 main RAM. Null pointers
+// fail automatically (0 < RAM_BASE).
+static bool in_ram(uint32_t addr, uint32_t len)
+{
+  return addr >= RAM_BASE && addr < RAM_END && (RAM_END - addr) >= len;
 }
 
-void uplink_sampler_init(void) {
+// Assemble a little-endian value from single-byte reads. Safe for any
+// address: ARM9 unaligned LDR/LDRH rotate instead of reading across the
+// word boundary, so misaligned addresses must not use wide loads.
+static uint32_t read_bytewise(uint32_t addr, uint8_t width)
+{
+  uint32_t v = 0;
+  for (uint8_t b = 0; b < width; b++)
+  {
+    v |= (uint32_t)*(volatile uint8_t *)(addr + b) << (8 * b);
+  }
+  return v;
+}
+
+// Evaluate one entry for the current frame. Pointer paths are walked
+// every frame; any failed in_ram check yields 0 (never a hard crash).
+static uint32_t eval_entry(const struct uplink_entry *e)
+{
+  uint32_t cur = e->base;
+  for (uint8_t i = 0; i < e->nsteps; i++)
+  {
+    cur += (uint32_t)(e->steps[i] & 0x7FFFu);
+    if (e->steps[i] & 0x8000u)
+    {
+      if (!in_ram(cur, 4))
+      {
+        return 0;
+      }
+      cur = read_bytewise(cur, 4);
+    }
+  }
+  if (!in_ram(cur, e->width))
+  {
+    return 0;
+  }
+  return read_bytewise(cur, e->width);
+}
+
+//--------------------------------------------------------------------+
+// Config upload
+//--------------------------------------------------------------------+
+
+void uplink_sampler_init(void)
+{
   uplink_frames_sent = 0;
   uplink_frames_dropped = 0;
   uplink_card_lock_skips = 0;
   uplink_card_lock_waits = 0;
   uplink_card_busy_timeouts = 0;
+  s_entry_count = 0;
+  s_staging_count = 0;
+  s_declared_count = 0;
+  s_epoch = 0;
   s_seq = 0;
-  s_block_len = 0;
-
-  // Default table (one value per slot, narrower values zero-extended):
-  //  0 PLAY_TIME_SECONDS          u32 @ &PLAY_TIME_SECONDS (linker-resolved)
-  //  1 PLAY_TIME_FRAME_COUNTER    u8  @ &PLAY_TIME_FRAME_COUNTER
-  //  2 SCENARIO_MAIN_FLAG_MAIN    u8  @ 0x022ABAA8
-  //  3 SCENARIO_MAIN_FLAG_SUB     u8  @ 0x022ABAA9
-  //  4 REQUEST_CLEAR_COUNT        u8  @ 0x022ABADB
-  //  5 REQUEST_CLEAR_COUNT_U16    u16 @ 0x022A40E4
-  //  6 magic_number               u32 @ 0x022A3670
-  //  7 overlay1_start             u16 @ 0x02329D40
-  //  8 dungeon_ptr                u32 @ 0x02354138
-  //  9 current_script_id_part1    u32 @ 0x02325ACA
-  // 10 current_script_id_part2    u32 @ 0x02325ACE
-  // 11 is_clearing_floor          u8  @ dungeon_ptr + 0x6
-  // 12 current_dungeon_id         u8  @ dungeon_ptr + 0x748
-  // 13 current_floor              u8  @ dungeon_ptr + 0x749
-  slot_set(0, (uint32_t)&PLAY_TIME_SECONDS, 4, 0);
-  slot_set(1, (uint32_t)&PLAY_TIME_FRAME_COUNTER, 1, 0);
-  slot_set(2, ADDR_SCENARIO_MAIN_FLAG_MAIN, 1, 0);
-  slot_set(3, ADDR_SCENARIO_MAIN_FLAG_SUB, 1, 0);
-  slot_set(4, ADDR_REQUEST_CLEAR_COUNT, 1, 0);
-  slot_set(5, ADDR_REQUEST_CLEAR_COUNT_U16, 2, 0);
-  slot_set(6, ADDR_MAGIC_NUMBER, 4, 0);
-  slot_set(7, ADDR_OVERLAY1_START, 2, 0);
-  slot_set(8, ADDR_DUNGEON_PTR, 4, 0);
-  slot_set(9, ADDR_SCRIPT_ID_PART1, 4, 0);
-  slot_set(10, ADDR_SCRIPT_ID_PART2, 4, 0);
-  slot_set(11, DUNGEON_OFF_IS_CLEARING_FLOOR, 1, 1);
-  slot_set(12, DUNGEON_OFF_CURRENT_DUNGEON_ID, 1, 1);
-  slot_set(13, DUNGEON_OFF_CURRENT_FLOOR, 1, 1);
+  s_frame_active = false;
 }
 
-// Assemble a value from single-byte reads, little-endian. Safe for any
-// address: ARM9 unaligned LDR/LDRH rotate instead of reading across the
-// word boundary, so misaligned addresses must not use wide loads.
-static uint32_t read_bytewise(uint32_t addr, uint8_t width) {
-  uint32_t v = 0;
-  for (uint8_t b = 0; b < width; b++) {
-    v |= (uint32_t)*(volatile uint8_t*)(addr + b) << (8 * b);
+enum uplink_cfg_err uplink_sampler_configure_begin(uint8_t version, uint16_t count)
+{
+  if (version != UPLINK_CONFIG_VERSION)
+  {
+    return UPLINK_CFG_ERR_VER;
   }
-  return v;
+  if (count == 0 || count > UPLINK_MAX_SAMPLES)
+  {
+    return UPLINK_CFG_ERR_COUNT;
+  }
+  s_staging_count = 0;
+  s_declared_count = count;
+  s_frame_active = false; // kill any half-built frame
+  return UPLINK_CFG_OK;
 }
 
-void uplink_sampler_tick(void) {
-  if (s_block_len >= sizeof(s_block)) {
-    uplink_frames_dropped += UPLINK_FRAMES_PER_BLOCK; // block not flushed in time
-    s_block_len = 0;
+enum uplink_cfg_err uplink_sampler_configure_entry(const uint8_t *cmd, uint16_t len)
+{
+  // cmd[0] == UPLINK_CMD_CONFIG_ENTRY (checked by the caller's parser)
+  uint16_t idx = (uint16_t)(cmd[1] | ((uint16_t)cmd[2] << 8));
+  uint32_t base = (uint32_t)cmd[3] | ((uint32_t)cmd[4] << 8) |
+                  ((uint32_t)cmd[5] << 16) | ((uint32_t)cmd[6] << 24);
+  uint8_t meta = cmd[7];
+  uint8_t width_code = meta & 3u;
+  uint8_t nsteps = (meta >> 2) & 7u;
+
+  if (width_code > 2)
+  {
+    return UPLINK_CFG_ERR_WIDTH;
+  }
+  if (nsteps > UPLINK_MAX_STEPS)
+  {
+    return UPLINK_CFG_ERR_STEPS;
+  }
+  uint16_t need = (uint16_t)(8 + 3 * nsteps);
+  if (len < need)
+  {
+    return UPLINK_CFG_ERR_STATE; // parser guarantees the full command
+  }
+  if (idx > s_staging_count)
+  {
+    return UPLINK_CFG_ERR_IDX; // gap: an earlier entry was lost
+  }
+  if (idx >= s_declared_count)
+  {
+    return UPLINK_CFG_ERR_FULL;
+  }
+  // Direct entries must point into RAM (typo feedback). Pointer-path
+  // bases are pointer LOCATIONS and are accepted anywhere: the game only
+  // ever reads at deref targets and the final address, and each of those
+  // reads is RAM-checked per frame (a path based outside RAM, or on a
+  // pointer that is null for part of the game, simply samples 0 until it
+  // becomes valid — see eval_entry).
+  if (nsteps == 0 && !in_ram(base, 1))
+  {
+    return UPLINK_CFG_ERR_BASE;
   }
 
-  struct uplink_frame* f = (struct uplink_frame*)(s_block + s_block_len);
-  f->magic[0] = 'P';
-  f->magic[1] = 'M';
-  f->seq = s_seq++;
-  f->game_frame = (uint32_t)PLAY_TIME_SECONDS * 60u + PLAY_TIME_FRAME_COUNTER;
-
-  // Resolve the dungeon pointer once per frame; pointer-derived slots read
-  // through it and zero out when it is not valid ARM9 RAM (menus, before
-  // dungeon init). The dungeon_ptr slot reports the raw value either way.
-  uint32_t dungeon = valid_dungeon_ptr(*(volatile uint32_t*)ADDR_DUNGEON_PTR);
-
-  for (uint8_t i = 0; i < UPLINK_SAMPLE_COUNT; i++) {
-    uint32_t addr = s_samples[i].address;
-    if (!addr) {
-      f->samples[i] = 0;
-      continue;
+  // idx == s_staging_count: append the next entry. idx < s_staging_count:
+  // a RE-SENT entry (the reader retries a batch until OK ENTRIES
+  // confirms it) — overwrite in place, do not advance the count. This
+  // makes batch delivery retry-until-confirmed instead of one-shot.
+  struct uplink_entry *e = &s_table[idx];
+  for (uint8_t i = 0; i < nsteps; i++)
+  {
+    const uint8_t *step = cmd + 8 + 3 * i;
+    uint16_t offset = (uint16_t)(step[0] | ((uint16_t)step[1] << 8));
+    if (offset > 0x7FFFu)
+    {
+      return UPLINK_CFG_ERR_OFFSET;
     }
-    if (s_samples[i].via_dungeon_ptr) {
-      if (!dungeon) {
-        f->samples[i] = 0;
-        continue;
-      }
-      addr += dungeon;
-    }
-
-    uint8_t w = s_samples[i].width;
-    if (w != 1 && w != 2) {
-      w = 4;
-    }
-    if (addr & (w - 1)) {
-      f->samples[i] = read_bytewise(addr, w);   // misaligned
-    } else if (w == 1) {
-      f->samples[i] = *(volatile uint8_t*)addr;
-    } else if (w == 2) {
-      f->samples[i] = *(volatile uint16_t*)addr;
-    } else {
-      f->samples[i] = *(volatile uint32_t*)addr;
-    }
-
+    // flags bit 0 = deref; remaining bits reserved (ignored)
+    e->steps[i] = offset | (step[2] & 1u ? 0x8000u : 0u);
   }
-
-  uint8_t* p = (uint8_t*)f;
-  uint16_t sum = 0;
-  // Checksum covers everything before the checksum field itself. The two
-  // bytes after it are zero padding (UPLINK_FRAME_LEN is 70, the packed
-  // struct is 68).
-  for (uint32_t i = 0; i < UPLINK_FRAME_LEN - 4; i++) {
-    sum += p[i];
+  e->base = base;
+  e->width = (uint8_t)(1u << width_code); // 1, 2 or 4
+  e->nsteps = nsteps;
+  if (idx == s_staging_count)
+  {
+    s_staging_count++;
   }
-  f->checksum = sum;
-
-  s_block_len += UPLINK_FRAME_LEN;
+  return UPLINK_CFG_OK;
 }
 
-uint32_t uplink_sampler_flush_block(uint8_t* dst) {
-  uint32_t len = s_block_len;
-  if (len > 0) {
-    // byte-wise copy: dst is a 512-byte DSpico card block buffer
-    uint8_t* d = dst;
-    uint8_t* s = s_block;
-    for (uint32_t i = 0; i < len; i++) {
-      d[i] = s[i];
-    }
-    s_block_len = 0;
-  }
-  return len;
+void uplink_sampler_configure_commit(void)
+{
+  s_entry_count = s_staging_count;
+  s_epoch++;
+  s_frame_active = false;
 }
 
-void uplink_sampler_discard_block(void) {
-  s_block_len = 0;
+void uplink_sampler_configure_abort(void)
+{
+  s_staging_count = 0;
+  s_declared_count = 0;
+  s_entry_count = 0;
+  s_frame_active = false;
 }
 
-bool uplink_sampler_set_addr(uint8_t index, uint32_t addr) {
-  if (index >= UPLINK_SAMPLE_COUNT) {
+uint16_t uplink_sampler_staging_count(void)
+{
+  return s_staging_count;
+}
+
+uint16_t uplink_sampler_declared_count(void)
+{
+  return s_declared_count;
+}
+
+uint16_t uplink_sampler_entry_count(void)
+{
+  return s_entry_count;
+}
+
+uint16_t uplink_sampler_epoch(void)
+{
+  return s_epoch;
+}
+
+//--------------------------------------------------------------------+
+// Frame streaming
+//--------------------------------------------------------------------+
+
+bool uplink_sampler_frame_start(void)
+{
+  if (s_frame_active || s_entry_count == 0)
+  {
     return false;
   }
-  // Retargeting resets the slot to a plain width-4 direct read of addr
-  // (any pointer-derived slot semantics are discarded); addr == 0 disables.
-  slot_set(index, addr, 4, 0);
+  s_frame_active = true;
+  // Header: magic, seq, game_frame, sample_count, epoch (little-endian)
+  s_frame_hdr[0] = 'P';
+  s_frame_hdr[1] = 'M';
+  put_le32(s_frame_hdr + 2, s_seq);
+  put_le32(s_frame_hdr + 6,
+           (uint32_t)PLAY_TIME_SECONDS * 60u + PLAY_TIME_FRAME_COUNTER);
+  s_frame_hdr[10] = (uint8_t)s_entry_count;
+  s_frame_hdr[11] = (uint8_t)(s_entry_count >> 8);
+  s_frame_hdr[12] = (uint8_t)s_epoch;
+  s_frame_hdr[13] = (uint8_t)(s_epoch >> 8);
+  s_frame_pos = 0;
+  s_frame_sum = 0;
+  s_frame_loaded = 0xFFFFu;
   return true;
 }
 
-uint32_t uplink_sampler_get_addr(uint8_t index) {
-  if (index >= UPLINK_SAMPLE_COUNT) {
+// Emit the next byte of the current frame and fold it into the checksum.
+static uint8_t frame_next_byte(void)
+{
+  uint8_t b;
+  uint16_t pos = s_frame_pos;
+  uint16_t samples_end = (uint16_t)(UPLINK_FRAME_HEADER_LEN + 4u * s_entry_count);
+  if (pos < UPLINK_FRAME_HEADER_LEN)
+  {
+    b = s_frame_hdr[pos]; // header prebuilt at frame start
+  }
+  else if (pos < samples_end)
+  {
+    // Samples: evaluate one entry, emit its 4 bytes little-endian
+    uint16_t off = (uint16_t)(pos - UPLINK_FRAME_HEADER_LEN);
+    uint16_t idx = (uint16_t)(off >> 2);
+    if (idx != s_frame_loaded)
+    {
+      s_frame_sample = eval_entry(&s_table[idx]);
+      s_frame_loaded = idx;
+    }
+    b = (uint8_t)(s_frame_sample >> ((off & 3u) * 8u));
+  }
+  else if (pos == samples_end)
+  {
+    // b = 0x98;
+    b = (uint8_t)(s_frame_sum & 0xFFu);
+  }
+  else
+  {
+    // b = 0x99;
+    b = (uint8_t)((s_frame_sum >> 8) & 0xFFu);
+  }
+
+  // The checksum bytes themselves are not part of the checksum; folding
+  // them would corrupt the high byte (emitted after the low one).
+  if (pos < samples_end)
+  {
+    s_frame_sum += b;
+  }
+  s_frame_pos++;
+  if (s_frame_pos >= (uint16_t)(samples_end + 3u))
+  {
+    // Frame complete: publish the seq (an aborted frame never gets here,
+    // so it leaves no gap in the host's seq stream).
+    s_frame_active = false;
+    s_seq++;
+  }
+  return b;
+}
+
+uint32_t uplink_sampler_frame_fill(uint8_t *dst, uint32_t dst_len)
+{
+  if (!s_frame_active)
+  {
     return 0;
   }
-  // Direct slots report the absolute address; pointer-derived slots report
-  // their dungeon_ptr offset.
-  return s_samples[index].address;
+  uint32_t n = 0;
+  while (n < dst_len && s_frame_active)
+  {
+    dst[n++] = frame_next_byte();
+  }
+  return n;
 }
 
-bool uplink_sampler_block_full(void) {
-  return s_block_len >= sizeof(s_block);
+void uplink_sampler_frame_abort(void)
+{
+  s_frame_active = false;
 }
 
-uint32_t uplink_sampler_get_seq(void) {
+uint32_t uplink_sampler_get_seq(void)
+{
   return s_seq;
 }

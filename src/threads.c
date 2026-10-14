@@ -17,7 +17,6 @@
 #define STACK_SIZE_4KB 1024 * 4
 #define STACK_SIZE_2KB 1024 * 2
 #define STACK_SIZE_1KB 1024
-
 // Lower number = higher priority. The watchdog must preempt a hung game
 // thread, so it runs above the other mod threads (10 and 30).
 #define WATCHDOG_THREAD_PRIO 5
@@ -36,7 +35,57 @@ uint64_t watchdog_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
 // UpdateAPSIdleTime) uses only small HUD_LEN char buffers plus static arrays.
 // The 2KB saved here keeps the code+data+bss region within its linker length.
 uint64_t vblank_routine_thread_stack[STACK_SIZE_1KB / sizeof(uint64_t)];
-uint64_t main_routine_thread_stack[STACK_SIZE_4KB / sizeof(uint64_t)];
+// 2KB: the USB uplink rewrite (protocol v2) removed its ~1.1KB of stack
+// buffers (two 512-byte card-phase buffers nested under UplinkPoll), which
+// used to be the deepest stack user on this thread. The remaining deepest
+// path is UpdateInputDisplay (two 512-byte HUD string buffers in one frame).
+// Headroom is measured, not guessed: the stack is painted at init and the
+// high-water mark is scanned periodically (mod_main_stack_used, reported in
+// the uplink PING reply). If a session ever reports usage above ~1.5KB,
+// revert this to STACK_SIZE_4KB and shrink UPLINK_MAX_SAMPLES instead.
+uint64_t main_routine_thread_stack[STACK_SIZE_2KB / sizeof(uint64_t)];
+
+// Stack paint/high-water instrumentation (uplink PING reports the value).
+// The pattern byte is chosen so touched bytes almost never match it.
+#define MAIN_STACK_PAINT_BYTE 0xC5u
+// High-water: stack bytes used by the main routine (0 = never scanned).
+// `unsigned int` matches pmdsky.h's uint32_t at this definition site; the
+// uplink reads it via an equally-spelled extern (no header is shared).
+volatile unsigned int mod_main_stack_used = 0;
+
+static void paint_main_stack(void)
+{
+  uint8_t *p = (uint8_t *)main_routine_thread_stack;
+  uint32_t n = sizeof(main_routine_thread_stack);
+  for (uint32_t i = 0; i < n; i++)
+  {
+    p[i] = MAIN_STACK_PAINT_BYTE;
+  }
+}
+
+// Scan the painted stack for the lowest touched byte (stack grows down,
+// so untouched bytes form the bottom prefix). Runs on the vblank thread
+// while the main routine may be running — read-only, so a torn view is
+// harmless for a diagnostic.
+static void scan_main_stack(void)
+{
+  uint8_t *p = (uint8_t *)main_routine_thread_stack;
+  uint32_t n = sizeof(main_routine_thread_stack);
+  for (uint32_t i = 0; i < n; i++)
+  {
+    if (p[i] != MAIN_STACK_PAINT_BYTE)
+    {
+      uint32_t used = n - i;
+      if (used > mod_main_stack_used)
+      {
+        mod_main_stack_used = used;
+      }
+      return;
+    }
+  }
+  // Whole stack touched: overflow territory. Report the full size.
+  mod_main_stack_used = n;
+}
 
 // Dedicated wake queue for the mod's threads. The VCount 0 hook wakes the
 // queue as a whole (OS_WakeupThread) instead of poking each thread with
@@ -53,6 +102,9 @@ uint32_t mod_wake_count = 0;
 
 __attribute__((used)) void InitThreads(void)
 {
+  // Paint the main routine's stack before its thread starts so the
+  // periodic scan can measure the high-water mark (see scan_main_stack).
+  paint_main_stack();
   OS_CreateThread(&watchdog_thread, CrashDumpWatchdogRoutine, NULL,
                   watchdog_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
                   STACK_SIZE_1KB, WATCHDOG_THREAD_PRIO);
@@ -60,8 +112,8 @@ __attribute__((used)) void InitThreads(void)
                   vblank_routine_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
                   STACK_SIZE_1KB, VBLANK_ROUTINE_THREAD_PRIO);
   OS_CreateThread(&main_routine_thread, MainRoutine, NULL,
-                  main_routine_thread_stack + STACK_SIZE_4KB / sizeof(uint64_t),
-                  STACK_SIZE_4KB, MAIN_ROUTINE_THREAD_PRIO);
+                  main_routine_thread_stack + STACK_SIZE_2KB / sizeof(uint64_t),
+                  STACK_SIZE_2KB, MAIN_ROUTINE_THREAD_PRIO);
   // One-time startup wake per thread (the SDK idiom, see CARDi_InitCommon):
   // OS_CreateThread leaves the thread waiting but not linked into any queue,
   // so OS_WakeupThread(&mod_wake_queue) could never start it. This direct wake
@@ -88,10 +140,18 @@ __attribute__((used)) void WakeupThreads(void)
 // see what could happen in other threads
 void VCount0Routine(void *)
 {
+  uint32_t scan_divider = 0;
   while (true)
   {
     CalculateFPS();
     UpdateAPSIdleTime();
+    // Stack high-water scan every 16 frames (~4 Hz): cheap (a few hundred
+    // byte compares) and catches every deep path that lasts >16 ms.
+    if (++scan_divider >= 16)
+    {
+      scan_divider = 0;
+      scan_main_stack();
+    }
     OS_SleepThread(&mod_wake_queue);
   }
 }
