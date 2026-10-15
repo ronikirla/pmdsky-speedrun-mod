@@ -91,8 +91,9 @@
         b Rand16Bit // Original function
 
     // Crash dump: branch FatalError and OS_Panic into stubs that capture the
-    // registers and a stack snapshot, then write a 0x1000 record to the backup
-    // EEPROM (layout in src/crash_dump.h). The stubs live in the verified-free
+    // registers and a stack snapshot, then write a 0x1140 (v6) record to the
+    // backup EEPROM (layout in src/crash_dump.h). The stubs live in the
+    // verified-free
     // region at 0x02094968 (zero-filled in the original ROM, no xrefs) right
     // after this code, and they emulate the original first instruction so the
     // stack layout the original code expects is preserved. The @delay guard

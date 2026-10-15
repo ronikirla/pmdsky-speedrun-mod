@@ -8,7 +8,8 @@
 // RX path, no firmware changes required.
 //
 // Integration:
-//   - UplinkInit()  called from the mod's InitThreads (once at boot)
+//   - UplinkInit()  called from the mod's MainRoutine loop (retries each
+//                   iteration until the uplink comes up)
 //   - UplinkPoll()  called from the mod's MainRoutine (~60 Hz, lowest-prio)
 #pragma once
 

@@ -18,12 +18,15 @@
 // card writes - that is the evidence needed to diagnose queue corruption
 // (lost waiters, spliced queues) of the kind the wake-queue rework fixes.
 //
-// Version 5 grows the record region from 0x1000 to 0x8000 (0xb6b0..0x136b0,
-// see the area note below), so each thread's snapshot is bounded by the
-// fair-share math instead of the staging buffer: snapshots stream out in
-// CRASH_DUMP_WRITE_CHUNK_SIZE pieces, one staged memcpy + card write at a
-// time. The header and thread-record layouts are otherwise unchanged from
-// version 4.
+// Version 5 grew the record region to 0x8000 (0xb6b0..0x136b0) and made each
+// thread's snapshot bounded by the fair-share math instead of the staging
+// buffer: snapshots stream out in CRASH_DUMP_WRITE_CHUNK_SIZE pieces, one
+// staged memcpy + card write at a time. Version 6 shrinks the region to
+// 0x1140 (0xb6b0..0xc7f0, see the area note below) so a dump can never
+// clobber the mod's EEPROM config magic byte at 0xc7f0 - v5's region
+// extended over it and every dump wiped the HUD/optimization settings (seen
+// on device with the deslopification-era build). The header and
+// thread-record layouts are otherwise unchanged.
 //
 // Record layout at CRASH_DUMP_EEPROM_BASE (all little-endian):
 //
@@ -50,9 +53,9 @@
 //   0x07C  char msg[0x40]   (FatalError format string, NUL-terminated, at most
 //                            CRASH_DUMP_MSG_MAX = 0x3F bytes; empty otherwise)
 //   0x0BC  SYS block (16 words, captured before Card_LockBackup):
-//   0x0BC  u32  sys_busy_timeouts (uplink_card_busy_timeouts)
-//   0x0C0  u32  sys_lock_skips    (uplink_card_lock_skips)
-//   0x0C4  u32  sys_lock_waits    (uplink_card_lock_waits)
+//   0x0BC  u32  sys_reserved0     (0 - v5's uplink busy/lock-skip/lock-wait
+//   0x0C0  u32  sys_reserved1      counters were removed with the card
+//   0x0C4  u32  sys_reserved2      watchdog in the deslopification cleanup)
 //   0x0C8  u32  sys_wake_count    (mod_wake_count: VCount 0 hook liveliness)
 //   0x0CC  u32  sys_frame_flags   (DAT_02003aac[0],[7],[9],[10] as bytes
 //                                  0..3; 0xFFFFFFFF when unavailable)
@@ -94,22 +97,27 @@
 // list order (highest priority first). Each record's snapshot gets a fair
 // share of the space that is still left (see StageThreadRecordHeader /
 // StreamSnapshot), so traces get shallower but always fit when the game has
-// many threads; with an empty region and 16 threads that share is ~0x77C
-// bytes per thread - a full used stack in practice. Snapshots stream out in
+// many threads; with an empty v6 region and 16 threads that share is ~0x90
+// bytes per thread (v5's 0x8000 region gave ~0x77C - a full used stack), so
+// deep traces clip to their shallower frames. Snapshots stream out in
 // CRASH_DUMP_WRITE_CHUNK_SIZE pieces (each staged through the buffer before
 // its card write), so a snapshot can be longer than the buffer.
 //
-// Record region (v5): 0xb6b0..0x136b0. 0xb6b0..0xc6af is untouched by the
-// game; 0xc6b0..0xc7f0 is erased-but-never-written flash; everything from
-// 0xc800 on is the game's second save copy, which the record is allowed to
-// overwrite: a dump survives only until the next in-game save rewrites that
-// copy, so extract the .sav before saving the game. The mod's own magic byte
-// (the config marker, src/eeprom.c) sits at 0xb6a7, below the region.
+// Record region (v6): 0xb6b0..0xc7f0. The whole area is never written by
+// the game (game save slot 1 ends at 0xb65c; 0xb65c..0xb6aa is the mod's own
+// timer/config/RNG data; everything up to the magic byte at 0xc7f0 is
+// game-untouched), so a dump survives until the next dump overwrites it and
+// extracting the .sav never races an in-game save. The region ends exactly
+// at the mod's EEPROM config magic byte (src/eeprom.c): v5's 0x8000 region
+// extended over it and every dump wiped the HUD/optimization settings. With
+// 16 threads the fair-share snapshot is ~0x90 bytes per thread; pc/lr/sp and
+// the wait-queue linkage (the evidence the queue-corruption diagnoses used)
+// are header data and unaffected.
 
 #define CRASH_DUMP_EEPROM_BASE 0xb6b0
-#define CRASH_DUMP_SIZE 0x8000
+#define CRASH_DUMP_SIZE 0x1140
 #define CRASH_DUMP_MAGIC 0x48535243 // 'CRSH'
-#define CRASH_DUMP_VERSION 5
+#define CRASH_DUMP_VERSION 6
 
 #define CRASH_DUMP_HOOK_FATAL_ERROR 1
 #define CRASH_DUMP_HOOK_OS_PANIC 2
@@ -217,3 +225,5 @@ void CrashDumpWrite(uint32_t hook_id, const uint32_t *regs, uint32_t sp_base);
 // Capture the live thread states and write the dump record (hook_id
 // CRASH_DUMP_HOOK_MANUAL). Called by the watchdog on L+R+X+Y.
 void CrashDumpTrigger(void);
+
+void CheckIfShouldCrashDump(void);

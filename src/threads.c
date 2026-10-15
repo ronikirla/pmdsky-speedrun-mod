@@ -116,8 +116,6 @@ __attribute__((used)) void InitThreads(void)
   // the queue (see WakeupThreads).
   OS_WakeupThreadDirect(&vblank_routine_thread);
   OS_WakeupThreadDirect(&main_routine_thread);
-  // Bring up the DSpico USB uplink (card lock is held briefly per
-  // transaction; the game's own card I/O is never disturbed)
 }
 
 __attribute__((used)) void WakeupThreads(void)
@@ -145,6 +143,7 @@ void VCount0Routine(void *)
       scan_divider = 0;
       scan_main_stack();
     }
+    CheckIfShouldCrashDump();
     OS_SleepThread(&mod_wake_queue);
   }
 }

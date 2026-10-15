@@ -584,8 +584,8 @@ void UplinkInit(void)
 
 void UplinkPoll(void)
 {
-  // Once the card bus wedged and was force-aborted, never touch it again:
-  // the game keeps running, just without USB streaming.
+  // No-op until UplinkInit() has succeeded: the game keeps running, just
+  // without USB streaming.
   if (!s_inited)
   {
     return;

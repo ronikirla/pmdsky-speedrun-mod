@@ -80,13 +80,10 @@ def make_record(hook_id: int = dump_mod.HOOK_FATAL_ERROR,
                 complete: bool = True,
                 stack_start: int = 0x23EF0000,
                 stack_end: int = 0x23EF0800,
-                sys_busy_timeouts: int = 0,
-                sys_lock_skips: int = 0,
-                sys_lock_waits: int = 0,
                 sys_wake_count: int = 1234,
                 sys_frame_flags: int = 0xFFFFFFFF,
                 sys_queue_samples=None) -> bytes:
-    """Build a synthetic 0x8000-byte crash dump record (format version 5).
+    """Build a synthetic 0x1140-byte crash dump record (format version 6).
 
     ``threads`` is a list of raw thread record bytes (see make_thread_record);
     by default one record is generated for the current thread, using
@@ -133,9 +130,6 @@ def make_record(hook_id: int = dump_mod.HOOK_FATAL_ERROR,
     put(dump_mod.OFF_THREADS_WRITTEN, threads_written)
     put(dump_mod.OFF_CRASHING_INDEX, crashing_index)
     put(dump_mod.OFF_TRIGGER_BUTTONS, trigger_buttons)
-    put(dump_mod.OFF_SYS_BUSY_TIMEOUTS, sys_busy_timeouts)
-    put(dump_mod.OFF_SYS_LOCK_SKIPS, sys_lock_skips)
-    put(dump_mod.OFF_SYS_LOCK_WAITS, sys_lock_waits)
     put(dump_mod.OFF_SYS_WAKE_COUNT, sys_wake_count)
     put(dump_mod.OFF_SYS_FRAME_FLAGS, sys_frame_flags)
     if sys_queue_samples:

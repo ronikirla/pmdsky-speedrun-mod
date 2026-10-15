@@ -9,7 +9,6 @@ from . import cpsr as cpsr_mod
 from .backtrace import Frame, snapshot_rows
 from .dump import (
     RECORD_SIZE,
-    EEPROM_BASE,
     THREAD_RECORD_HEADER_SIZE,
     CrashDump,
     HOOK_FATAL_ERROR,
@@ -189,7 +188,7 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
     push("  threads     %d in the game's list, %d records written%s"
          % (dump.thread_count, dump.threads_written,
             "" if dump.complete else "  [dump incomplete]"))
-    # Written extent vs the 0x8000 reserve: the last record's end offset.
+    # Written extent vs the 0x1140 reserve: the last record's end offset.
     used_extent = 0
     for t in dump.threads:
         end = t.record_offset + THREAD_RECORD_HEADER_SIZE + len(t.snapshot)
@@ -197,9 +196,6 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
     push("  extent      %s of %s bytes written (ends at file offset %s)"
          % (hex(used_extent), hex(RECORD_SIZE),
             hex(ctx.source_offset + used_extent)))
-    if used_extent > 0xC800 - EEPROM_BASE:
-        push("  note        the record extends over the game's second save copy; "
-             "it survives only until the next in-game save")
 
     push("")
     push("Crash site")
@@ -226,11 +222,8 @@ def render_text(dump: CrashDump, table: Optional[SymbolTable],
         push("  r%-2d  %s%s" % (i, _addr(value), annotation))
 
     push("")
-    push("Mod / uplink state (captured before the dump's own card writes)")
+    push("Mod state (captured before the dump's own card writes)")
     sys = dump.sys
-    push("  uplink busy timeouts %d, lock skips %d, lock waits >=2ms %d"
-         % (sys.uplink_card_busy_timeouts, sys.uplink_card_lock_skips,
-            sys.uplink_card_lock_waits))
     push("  mod wake count       %d (VCount 0 hook wakeups)" % sys.mod_wake_count)
     flags = sys.frame_flags
     if flags is None:
@@ -400,9 +393,6 @@ def build_json(dump: CrashDump, table: Optional[SymbolTable],
         },
         "complete": dump.complete,
         "sys": {
-            "uplink_card_busy_timeouts": dump.sys.uplink_card_busy_timeouts,
-            "uplink_card_lock_skips": dump.sys.uplink_card_lock_skips,
-            "uplink_card_lock_waits": dump.sys.uplink_card_lock_waits,
             "mod_wake_count": dump.sys.mod_wake_count,
             "frame_flags": dump.sys.frame_flags,
             "queue_samples": [

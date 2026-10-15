@@ -31,7 +31,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Parse the PMD Sky speedrun mod's crash dump record from a "
                     "save file and print a user-friendly report.",
     )
-    parser.add_argument("sav", help="path to the .sav file (or a bare 0x1000-byte dump record)")
+    parser.add_argument("sav", help="path to the .sav file (or a bare 0x1140-byte dump record)")
     parser.add_argument(
         "--offset", type=_int_arg, default=None, metavar="N",
         help="offset of the crash dump record in the file (default: %s; "

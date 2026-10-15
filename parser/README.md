@@ -5,11 +5,13 @@ speedrun mod writes into the save file's backup EEPROM, decodes it, resolves
 addresses against the [`pmdsky-debug`](../pmdsky-debug) reverse-engineered
 symbol tables, and prints a user-friendly report.
 
-The record (format version 5) lives at save-file offset `0xB6B0` and spans
-`0x8000` bytes (`0xB6B0..0x136B0`). It extends over the game's second save
-copy, so it survives only until the next in-game save: extract the `.sav`
-promptly after a dump. Per-thread snapshots are bounded by a fair share of
-the region, so they cover a full used stack in practice.
+The record (format version 6) lives at save-file offset `0xB6B0` and spans
+`0x1140` bytes (`0xB6B0..0xC7F0`). The region lies entirely in save space
+the game never writes, so a dump survives until the next dump overwrites it
+and extracting the `.sav` never races an in-game save. Per-thread snapshots
+are bounded by a fair share of the region (~0x90 bytes per thread with 16
+threads; `pc`/`lr`/`sp` and the wait-queue linkage are header data and
+unaffected).
 
 ```text
 python -m parser path\to\save.sav [options]
@@ -71,7 +73,7 @@ python -m parser SAV
 Exit codes: `0` report printed · `1` error · `2` clean save (no crash dump).
 
 The symbol directory is found automatically when the command runs inside this
-repository (`pmdsky-debug/symbols`). A file that is exactly 0x8000 bytes is
+repository (`pmdsky-debug/symbols`). A file that is exactly 0x1140 bytes is
 treated as a bare dump record; other layouts are searched for a valid
 `'CRSH'` record.
 
@@ -102,7 +104,7 @@ Notes:
 ## Record format (from `src/crash_dump.h`)
 
 All values little-endian. The record lives at EEPROM offset `0xB6B0`
-(`--offset`), 0x1000 bytes total. Since format version 3 it holds a fixed
+(`--offset`), 0x1140 bytes total. Since format version 3 it holds a fixed
 0x100-byte header followed by packed variable-length thread records, one per
 thread, each with its own stack snapshot.
 
@@ -111,7 +113,7 @@ Header:
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0x000 | 4 | magic `'CRSH'` (`0x48535243`) |
-| 0x004 | 4 | record version (3) |
+| 0x004 | 4 | record version (6) |
 | 0x008 | 4 | hook id (1 = FatalError, 2 = OS_Panic, 3 = manual L+R+X+Y) |
 | 0x00C | 4 | tick (`OS_GetTickLo()`) |
 | 0x010 | 4 | pc — hooked instruction / trigger site (current thread) |
@@ -126,7 +128,8 @@ Header:
 | 0x070 | 4 | threads_written (thread records actually written) |
 | 0x074 | 4 | crashing_index (index of the current thread's record; 0) |
 | 0x078 | 4 | trigger_buttons (raw `held_buttons` for manual triggers) |
-| 0x07C | 0x80 | FatalError format string (NUL-terminated) |
+| 0x07C | 0x40 | FatalError format string (NUL-terminated; empty for other hooks) |
+| 0x0BC | 0x3C | SYS block (16 words: reserved, wake count, frame flags, 3 queue samples) |
 | 0x0FC | 4 | complete flag (written last; 0 = the dump was interrupted) |
 
 Thread records (packed from 0x100, variable length):
@@ -143,8 +146,10 @@ Thread records (packed from 0x100, variable length):
 | +0x1C | 4 | stack_end (high end, exclusive) |
 | +0x20 | 4 | state (`enum os_thread_state`) |
 | +0x24 | 4 | snapshot_bytes (multiple of 4) |
-| +0x28 | 4 | flags (bit 0 = sp inside the stack bounds, bit 1 = current thread) |
-| +0x2C | n | stack snapshot, from `sp` upward |
+| +0x28 | 4 | flags (bit 0 = sp inside the stack bounds, bit 1 = current thread, bit 2 = sp outside the bounds) |
+| +0x2C | 0x34 | r0–r12 (hook regs for record 0, saved `os_context` regs otherwise) |
+| +0x60 | 0x14 | wait-queue linkage: queue, mutex, link.prev, link.next, thread pointer |
+| +0x74 | n | stack snapshot, from `sp` upward |
 
 Thread record 0 is always the current thread (the crashing thread, or the
 watchdog for a manual trigger); the other records follow the game's thread
@@ -157,6 +162,5 @@ words for OS_Panic (`r3`, `lr`, `r0`, `r1`, `r2`, `r4`–`r12`). The backtrace
 scanner skips them; `--raw-stack` labels them. Other threads' snapshots have
 no spill prefix.
 
-Records written by mod versions older than the format change (version 2: a
-0x200-byte header plus one 0xE00-byte stack snapshot) are rejected with an
-error.
+Records written by mod versions older than the format change (versions 2
+through 5) are rejected with an error.

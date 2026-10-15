@@ -4,20 +4,20 @@ The record layout mirrors ``src/crash_dump.h`` in the mod source tree: a
 0x100-byte header followed by packed variable-length thread records (one per
 thread, each with its own stack snapshot), all values little-endian.  The
 mod writes the record into the save file's backup EEPROM at offset 0xB6B0,
-which maps 1:1 onto the ``.sav`` file.  Since format v5 the record spans
-0x8000 bytes (0xB6B0..0x136B0 in the save file).
+which maps 1:1 onto the ``.sav`` file.  Since format v6 the record spans
+0x1140 bytes (0xB6B0..0xC7F0 in the save file).
 
-Version 5 records grow the record region from 0x1000 to 0x8000 (same base
-0xB6B0, extending over the game's second save copy - the game rewrites that
-copy on the next in-game save, so extract the .sav promptly after a dump).
-Per-thread snapshots are bounded by a fair share of the region instead of
-the mod's staging buffer and stream out in small chunks, so they cover a
-full used stack in practice. Version 4 records add per-thread saved
-registers and OS wait-queue linkage (queue/mutex/link.prev/link.next/thread
-pointer) captured before the dump's own card writes, plus a header SYS block
-(uplink counters, frame flags, queue samples); v5 keeps that layout and only
-grows the region. Only version 5 is supported: older records have a
-different layout.
+Version 5 grew the record region to 0x8000 (same base 0xB6B0, extending
+over the game's second save copy); per-thread snapshots were bounded by a
+fair share of the region instead of the mod's staging buffer and streamed
+out in small chunks. Version 6 shrinks the region to 0x1140, ending exactly
+at the mod's EEPROM config magic byte at 0xC7F0 (v5's larger region
+clobbered it on every dump, wiping the mod's HUD/optimization settings).
+Version 4 added per-thread saved registers and OS wait-queue linkage
+(queue/mutex/link.prev/link.next/thread pointer) captured before the dump's
+own card writes, plus a header SYS block (system counters, frame flags,
+queue samples); the header and thread-record layouts are unchanged through
+v6. Only version 6 is supported: older records have a different layout.
 
 This module is intentionally dependency-free (standard library only).
 """
@@ -31,8 +31,8 @@ from typing import List, Optional
 # --- Constants mirrored from src/crash_dump.h -------------------------------
 
 EEPROM_BASE = 0xB6B0        # CRASH_DUMP_EEPROM_BASE
-RECORD_SIZE = 0x8000        # CRASH_DUMP_SIZE (v5: extends over the game's
-                            # second save copy from 0xC800 on)
+RECORD_SIZE = 0x1140        # CRASH_DUMP_SIZE (v6: ends at the mod's EEPROM
+                            # config magic byte at 0xC7F0)
 HEADER_SIZE = 0x100         # CRASH_DUMP_HEADER_SIZE
 MSG_MAX = 0x3F              # CRASH_DUMP_MSG_MAX (0x40-byte field incl. NUL)
 
@@ -43,7 +43,7 @@ MAGIC = 0x48535243          # 'CRSH' when read little-endian
 MAGIC_BYTES = b"CRSH"
 THREAD_MAGIC = 0x44524854   # 'THRD'
 THREAD_MAGIC_BYTES = b"THRD"
-RECORD_VERSION = 5          # CRASH_DUMP_VERSION
+RECORD_VERSION = 6          # CRASH_DUMP_VERSION
 
 HOOK_FATAL_ERROR = 1        # CRASH_DUMP_HOOK_FATAL_ERROR
 HOOK_OS_PANIC = 2           # CRASH_DUMP_HOOK_OS_PANIC
@@ -83,9 +83,9 @@ OFF_CRASHING_INDEX = 0x074
 OFF_TRIGGER_BUTTONS = 0x078
 OFF_MSG = 0x07C             # msg at 0x07C..0x0BB (0x40 bytes)
 # SYS block (captured before the dump's first card write), 0x0BC..0x0FB.
-OFF_SYS_BUSY_TIMEOUTS = 0x0BC
-OFF_SYS_LOCK_SKIPS = 0x0C0
-OFF_SYS_LOCK_WAITS = 0x0C4
+OFF_SYS_RESERVED0 = 0x0BC   # v5's uplink busy/lock-skip/lock-wait counters
+OFF_SYS_RESERVED1 = 0x0C0   # (removed with the card watchdog); always zero
+OFF_SYS_RESERVED2 = 0x0C4   # since v6
 OFF_SYS_WAKE_COUNT = 0x0C8
 OFF_SYS_FRAME_FLAGS = 0x0CC
 OFF_SYS_QUEUE_SAMPLES = 0x0D0   # 3 x {ptr, head, tail} words
@@ -210,9 +210,6 @@ class QueueSample:
 class SysInfo:
     """The header SYS block: system state sampled before the dump's writes."""
 
-    uplink_card_busy_timeouts: int
-    uplink_card_lock_skips: int
-    uplink_card_lock_waits: int
     mod_wake_count: int
     frame_flags_raw: int            # DAT_02003aac[0],[7],[9],[10] as bytes
     queue_samples: List[QueueSample]
@@ -322,12 +319,12 @@ class LocatedRecord:
 
 
 def locate_record(data: bytes, offset: Optional[int] = None) -> LocatedRecord:
-    """Find the 0x1000-byte crash dump record inside a save file (or raw dump).
+    """Find the crash dump record inside a save file (or raw dump).
 
     Resolution order:
 
     1. ``offset`` given explicitly -> slice there, no questions asked.
-    2. Input is exactly 0x8000 bytes -> treat it as a bare record that was
+    2. Input is exactly 0x1140 bytes -> treat it as a bare record that was
        extracted from a save.
     3. File is large enough -> use the default EEPROM location (0xB6B0).
        An all-0xFF region there means "no crash recorded".
@@ -362,11 +359,10 @@ def locate_record(data: bytes, offset: Optional[int] = None) -> LocatedRecord:
     default_end = EEPROM_BASE + RECORD_SIZE
     if len(data) >= default_end:
         region = data[EEPROM_BASE:default_end]
-        # Clean-save detection uses only the first 0x1000 bytes: that sub-region
-        # is never written by the game, so all-0xFF there means no dump was ever
-        # written. The rest of the v5 region overlaps the game's second save
-        # copy, which holds game data even on a clean save.
-        if _is_erased(region[:0x1000]):
+        # Clean-save detection checks the whole region: since v6 it lies
+        # entirely in save space the game never writes, so all-0xFF there
+        # means no dump was ever written.
+        if _is_erased(region):
             raise CleanSaveError(
                 "the crash dump region at file offset %s is erased (all 0xFF); "
                 "the game has not crashed (or the dump was already consumed)"
@@ -480,16 +476,13 @@ def parse_thread_records(record: bytes, expected: int,
 
 def parse_sys_block(record: bytes) -> SysInfo:
     """Decode the header SYS block (system state pre-dump-writes)."""
-    words = struct.unpack_from("<16I", record, OFF_SYS_BUSY_TIMEOUTS)
+    words = struct.unpack_from("<16I", record, OFF_SYS_RESERVED0)
     samples: List[QueueSample] = []
     for i in range(SYS_QUEUE_SAMPLES):
         q, head, tail = words[5 + i * 3:8 + i * 3]
         if q != 0:
             samples.append(QueueSample(queue=q, head=head, tail=tail))
     return SysInfo(
-        uplink_card_busy_timeouts=words[0],
-        uplink_card_lock_skips=words[1],
-        uplink_card_lock_waits=words[2],
         mod_wake_count=words[3],
         frame_flags_raw=words[4],
         queue_samples=samples,
@@ -497,12 +490,12 @@ def parse_sys_block(record: bytes) -> SysInfo:
 
 
 def parse_record(record: bytes, source_offset: int = 0) -> CrashDump:
-    """Decode a raw 0x8000-byte record into a :class:`CrashDump`.
+    """Decode a raw 0x1140-byte record into a :class:`CrashDump`.
 
     Validation problems (bad magic, checksum, truncated thread table) are
     collected into ``warnings`` instead of aborting: a partially corrupted
     record is still worth reporting.  A record with valid magic but a
-    different version is rejected outright: only version 5 is supported.
+    different version is rejected outright: only version 6 is supported.
     """
     if len(record) < RECORD_SIZE:
         raise DumpError(

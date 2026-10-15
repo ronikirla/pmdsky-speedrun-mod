@@ -36,11 +36,6 @@ struct crash_thread_slot
 // anything below 0x03000000 is a plausible address.
 #define CRASH_DUMP_MAIN_RAM_END 0x03000000
 
-// Bounded wait (ms) for the mod's backup section in CrashDumpEmit, see
-// EepromTryLock. Keep it short: the dump exists to be written while things
-// are already broken.
-#define CRASH_DUMP_LOCK_WAIT_MS 100
-
 // Per-thread wait-state fields, sampled BEFORE Card_LockBackup: the dump's
 // own card writes park threads on the very lock/busy queues being diagnosed
 // (and a running game keeps scheduling), so the queue linkage must be frozen
@@ -62,13 +57,6 @@ static uint32_t crash_sys_block[16];
 // Frame-sync flags read by CustomWaitTillVBlank (src/optimizations.c): the
 // symbol is a pointer to the flag array. Mirrors the declaration there.
 extern bool *DAT_02003aac;
-
-// Uplink/diagnostic counters live in the stdint world (src/uplink/*); declare
-// them here with the pmdsky-style type instead of including the uplink
-// header, which would collide with pmdsky.h's typedefs.
-extern uint32_t uplink_card_busy_timeouts;
-extern uint32_t uplink_card_lock_skips;
-extern uint32_t uplink_card_lock_waits;
 
 static struct crash_thread_slot crash_thread_slots[CRASH_DUMP_MAX_THREADS];
 
@@ -153,9 +141,9 @@ static void CapturePreLockState(uint32_t n_slots)
   {
     crash_sys_block[i] = 0;
   }
-  crash_sys_block[0] = uplink_card_busy_timeouts;
-  crash_sys_block[1] = uplink_card_lock_skips;
-  crash_sys_block[2] = uplink_card_lock_waits;
+  // Words 0-2 stay zero (the block is zeroed above): v5's uplink busy/
+  // lock-skip/lock-wait counters were removed with the card watchdog in
+  // the deslopification cleanup; nothing increments them anymore.
   crash_sys_block[3] = mod_wake_count;
 
   // Frame-sync flags (DAT_02003aac is a pointer to the flag byte array).
@@ -558,7 +546,7 @@ void CrashDumpTrigger(void)
                 (uint32_t)raw_buttons[0] | ((uint32_t)raw_buttons[1] << 8));
 }
 
-void CheckIfShouldCrashDump(void *arg)
+void CheckIfShouldCrashDump(void)
 {
   struct held_buttons held_buttons;
   GetHeldButtons(0, (void *)&held_buttons);
