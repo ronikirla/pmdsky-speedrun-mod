@@ -1,5 +1,7 @@
 # PMDSky uplink protocol v2
 
+NOTE: this entire file was AI-generated.
+
 Single source of truth for the USB uplink wire protocol spoken between:
 
 - the mod running on the NDS (`src/uplink/uplink.c`, `src/uplink/uplink_sampler.c`), and

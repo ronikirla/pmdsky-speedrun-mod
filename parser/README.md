@@ -1,5 +1,7 @@
 # PMD Sky Speedrun Mod — Crash Dump Parser
 
+NOTE: this entire file was AI-generated.
+
 A portable, dependency-light Python tool that reads the crash dump record the
 speedrun mod writes into the save file's backup EEPROM, decodes it, resolves
 addresses against the [`pmdsky-debug`](../pmdsky-debug) reverse-engineered
