@@ -92,15 +92,21 @@ struct os_thread_queue mod_wake_queue;
 uint32_t mod_wake_count = 0;
 
 __attribute__((used)) void InitThreads(void) {
-    // Paint the main routine's stack before its thread starts so the
-    // periodic scan can measure the high-water mark (see scan_main_stack).
-    paint_main_stack();
     OS_CreateThread(&vblank_routine_thread, VCount0Routine, NULL,
                     vblank_routine_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
                     STACK_SIZE_1KB, VBLANK_ROUTINE_THREAD_PRIO);
     OS_CreateThread(&main_routine_thread, MainRoutine, NULL,
                     main_routine_thread_stack + STACK_SIZE_2KB / sizeof(uint64_t),
                     STACK_SIZE_2KB, MAIN_ROUTINE_THREAD_PRIO);
+    // Paint the main routine's stack AFTER OS_CreateThread: the SDK wipes
+    // the stack region at thread creation (MI_CpuClear32 in
+    // OS_CreateThread), so a pre-creation paint never survived and the
+    // periodic scan always read the wipe — latching stack=2048 forever.
+    // Safe ordering: OS_WakeupThreadDirect below only marks the threads
+    // runnable; the scheduler runs them at the next yield, after this
+    // function (same priority, not preempted by lower-priority threads)
+    // has finished painting.
+    paint_main_stack();
     // One-time startup wake per thread (the SDK idiom, see CARDi_InitCommon):
     // OS_CreateThread leaves the thread waiting but not linked into any queue,
     // so OS_WakeupThread(&mod_wake_queue) could never start it. This direct wake
