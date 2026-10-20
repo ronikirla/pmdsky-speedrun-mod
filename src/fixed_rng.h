@@ -5,11 +5,10 @@
 bool IsFixedRNG(void);
 void SetFixedRNGSeed(char *buffer);
 
-struct fixed_rng_state
-{
-  uint32_t calls_per_scenario;
-  int scenario_prev;
-  int level_prev;
+struct fixed_rng_state {
+    uint32_t calls_per_scenario;
+    int scenario_prev;
+    int level_prev;
 };
 
 extern char base_rng_text[RNG_INPUT_LEN + 1];

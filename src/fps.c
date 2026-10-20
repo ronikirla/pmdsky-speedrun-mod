@@ -13,69 +13,69 @@
 #define MULTIPLIER_TO_FPS 4
 
 bool is_prev_frames_filled = false; // Shared resource
-int fps; // Shared resource
+int fps;                            // Shared resource
 int dungeon_rng_advances = 0;
 int lag_frames = 0;
 uint8_t last_frame;
 uint8_t curr_frame;
 
 bool IsLagging() {
-  return (curr_frame == last_frame) && !OverlayIsLoaded(OGROUP_OVERLAY_1);
+    return (curr_frame == last_frame) && !OverlayIsLoaded(OGROUP_OVERLAY_1);
 }
 
 void UpdateFPS(void) {
-  // This never gets changed back to false so it's thread safe
-  if (is_prev_frames_filled) {
-    char fps_string[HUD_LEN];
-    // In the main menu, instead of printing FPS we print the optimization mode
-    if (OverlayIsLoaded(OGROUP_OVERLAY_1)) {
-      snprintf(fps_string, HUD_LEN, GetOptimizationModeString()); 
-    } else {
-      if (GetOptimizationMode() == OPTIMIZATION_MODE_RNG_VIEWER && OverlayIsLoaded(OGROUP_OVERLAY_29)) {
-        snprintf(fps_string, HUD_LEN, "%d", dungeon_rng_advances); 
-      } else {
-        // fps: atomic access, thread safe
-        #ifdef LAG_TEST
-        snprintf(fps_string, HUD_LEN, "%d", lag_frames); 
-        #else
-        snprintf(fps_string, HUD_LEN, "%d fps", fps); 
-        #endif
-      }
+    // This never gets changed back to false so it's thread safe
+    if (is_prev_frames_filled) {
+        char fps_string[HUD_LEN];
+        // In the main menu, instead of printing FPS we print the optimization mode
+        if (OverlayIsLoaded(OGROUP_OVERLAY_1)) {
+            snprintf(fps_string, HUD_LEN, GetOptimizationModeString());
+        } else {
+            if (GetOptimizationMode() == OPTIMIZATION_MODE_RNG_VIEWER && OverlayIsLoaded(OGROUP_OVERLAY_29)) {
+                snprintf(fps_string, HUD_LEN, "%d", dungeon_rng_advances);
+            } else {
+// fps: atomic access, thread safe
+#ifdef LAG_TEST
+                snprintf(fps_string, HUD_LEN, "%d", lag_frames);
+#else
+                snprintf(fps_string, HUD_LEN, "%d fps", fps);
+#endif
+            }
+        }
+        UpdateHUDString(SPEEDRUN_HUD_FPS, fps_string, 2);
     }
-    UpdateHUDString(SPEEDRUN_HUD_FPS, fps_string, 2);
-  }
 }
 
 void CalculateFPS(void) {
-  static struct play_time prev_frames[MONITORING_WINDOW];
-  static int idx = 0;
+    static struct play_time prev_frames[MONITORING_WINDOW];
+    static int idx = 0;
 
-  struct play_time* igt = &PLAY_TIME;
-  last_frame = curr_frame;
-  curr_frame = igt->frames;
-  #ifdef LAG_TEST
-  if (IsLagging()) {
-    lag_frames++;
-  }
-  #endif
-  if (is_prev_frames_filled) {
-    fps = IGTDifferenceFrames(igt, &prev_frames[idx]) * MULTIPLIER_TO_FPS;
-  } else {
-    is_prev_frames_filled = (idx == MONITORING_WINDOW - 1);
-  }
-  memcpy(&prev_frames[idx], igt, sizeof(*igt));
-  idx = (idx + 1) % MONITORING_WINDOW;
+    struct play_time *igt = &PLAY_TIME;
+    last_frame = curr_frame;
+    curr_frame = igt->frames;
+#ifdef LAG_TEST
+    if (IsLagging()) {
+        lag_frames++;
+    }
+#endif
+    if (is_prev_frames_filled) {
+        fps = IGTDifferenceFrames(igt, &prev_frames[idx]) * MULTIPLIER_TO_FPS;
+    } else {
+        is_prev_frames_filled = (idx == MONITORING_WINDOW - 1);
+    }
+    memcpy(&prev_frames[idx], igt, sizeof(*igt));
+    idx = (idx + 1) % MONITORING_WINDOW;
 }
 
 // Practice feature for quicksave manips
 __attribute__((used)) void LogDungeonRand16Bit() {
-  dungeon_rng_advances++;
-  DungeonRand16Bit();
+    dungeon_rng_advances++;
+    DungeonRand16Bit();
 }
 
 void ResetDungeonRNGAdvances(void) {
-  dungeon_rng_advances = 0;
-  #ifdef LAG_TEST
-  lag_frames = 0;
-  #endif
+    dungeon_rng_advances = 0;
+#ifdef LAG_TEST
+    lag_frames = 0;
+#endif
 }

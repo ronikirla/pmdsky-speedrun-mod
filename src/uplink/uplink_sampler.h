@@ -49,18 +49,17 @@
 
 // Validation results for the config commands; uplink.c maps them to the
 // "ERR <REASON>" reply lines.
-enum uplink_cfg_err
-{
-  UPLINK_CFG_OK = 0,
-  UPLINK_CFG_ERR_VER,
-  UPLINK_CFG_ERR_COUNT,
-  UPLINK_CFG_ERR_FULL,
-  UPLINK_CFG_ERR_IDX,
-  UPLINK_CFG_ERR_WIDTH,
-  UPLINK_CFG_ERR_STEPS,
-  UPLINK_CFG_ERR_OFFSET,
-  UPLINK_CFG_ERR_BASE,
-  UPLINK_CFG_ERR_STATE,
+enum uplink_cfg_err {
+    UPLINK_CFG_OK = 0,
+    UPLINK_CFG_ERR_VER,
+    UPLINK_CFG_ERR_COUNT,
+    UPLINK_CFG_ERR_FULL,
+    UPLINK_CFG_ERR_IDX,
+    UPLINK_CFG_ERR_WIDTH,
+    UPLINK_CFG_ERR_STEPS,
+    UPLINK_CFG_ERR_OFFSET,
+    UPLINK_CFG_ERR_BASE,
+    UPLINK_CFG_ERR_STATE,
 };
 
 // Linkable counters (crash-dump SYS block + PING reply)
