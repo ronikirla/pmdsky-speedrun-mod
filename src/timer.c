@@ -17,9 +17,9 @@ bool file_timer = true;
 struct play_time start_time;
 
 struct split {
-    char string[HUD_LEN];
-    int x_offset;
-    int remaining_frames; // Shared resource
+  char string[HUD_LEN];
+  int x_offset;
+  int remaining_frames; // Shared resource
 };
 
 struct split current_split;
@@ -27,114 +27,114 @@ struct split current_split;
 bool prev_held_timer = false;
 
 // Return difference a - b in frames in play_time structs
-int IGTDifferenceFrames(struct play_time *a, struct play_time *b) {
-    return (a->seconds - b->seconds) * 60 + (a->frames - b->frames);
+int IGTDifferenceFrames(struct play_time* a, struct play_time* b) {
+  return (a->seconds - b->seconds) * 60 + (a->frames - b->frames);
 }
 
 // Give difference a - b in play_time structs
-void IGTDifference(struct play_time *r, struct play_time *a, struct play_time *b) {
-    int seconds = a->seconds - b->seconds;
-    int frames = a->frames - b->frames;
-    if (frames < 0) {
-        frames += 60;
-        seconds -= 1;
-    }
-    r->seconds = seconds;
-    r->frames = frames;
+void IGTDifference(struct play_time* r, struct play_time* a, struct play_time* b) {
+  int seconds = a->seconds - b->seconds;
+  int frames = a->frames - b->frames;
+  if (frames < 0) {
+    frames += 60;
+    seconds -= 1;
+  }
+  r->seconds = seconds;
+  r->frames = frames;
 }
 
 __attribute__((used)) void ResetSplitRemainingFrames(void) {
-    current_split.remaining_frames = SPLIT_SHOW_FRAMES;
-    ResetAPSRemainingFrames();
-    ResetDungeonRNGAdvances();
+  current_split.remaining_frames = SPLIT_SHOW_FRAMES;
+  ResetAPSRemainingFrames();
+  ResetDungeonRNGAdvances();
 }
 
-__attribute__((used)) void HijackCalcChecksumAndSplit(undefined *save_info, int size) {
-    current_split.remaining_frames = 0;
-    CalcChecksum(save_info, size);
+__attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int size) {
+  current_split.remaining_frames = 0;
+  CalcChecksum(save_info, size);
 }
 
 // Start+L for reset toggle, Select+L to show split time
 void HandleTimerInput(void) {
-    struct held_buttons held_buttons;
-    GetHeldButtons(0, (void *)&held_buttons);
-    if (held_buttons.start && held_buttons.l && !held_buttons.r) {
-        if (!prev_held_timer) {
-            ResetAPS();
-            ResetDungeonRNGAdvances();
-            prev_held_timer = true;
-            current_split.remaining_frames = 0;
-            if (file_timer) {
-                memcpy(&start_time, &PLAY_TIME, sizeof(struct play_time));
-                file_timer = false;
-            } else {
-                memset(&start_time, 0, sizeof(struct play_time));
-                file_timer = true;
-            }
-            SaveConfigurations();
-        }
-    } else if (held_buttons.select && held_buttons.l && !held_buttons.r) {
-        if (!prev_held_timer) {
-            prev_held_timer = true;
-            ResetSplitRemainingFrames();
-        }
-    } else {
-        prev_held_timer = false;
+  struct held_buttons held_buttons;
+  GetHeldButtons(0, (void*)&held_buttons);
+  if (held_buttons.start && held_buttons.l && !held_buttons.r) {
+    if (!prev_held_timer) {
+      ResetAPS();
+      ResetDungeonRNGAdvances();
+      prev_held_timer = true;
+      current_split.remaining_frames = 0;
+      if (file_timer) {
+        memcpy(&start_time, &PLAY_TIME, sizeof(struct play_time));
+        file_timer = false;
+      } else {
+        memset(&start_time, 0, sizeof(struct play_time));
+        file_timer = true;
+      }
+      SaveConfigurations();
     }
+  } else if (held_buttons.select && held_buttons.l && !held_buttons.r) {
+    if (!prev_held_timer) {
+      prev_held_timer = true;
+      ResetSplitRemainingFrames();
+    }
+  } else {
+    prev_held_timer = false;
+  }
 }
 
 void UpdateTimer(void) {
-    static const uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 21, 23, 25, 26, 28, 30, 31, 33, 35, 36, 38, 40, 41, 43, 45, 46, 48, 50, 51, 53, 55, 56, 58, 60, 61, 63, 65, 66, 68, 70, 71, 73, 75, 76, 78, 80, 81, 83, 85, 86, 88, 90, 91, 93, 95, 96, 98};
+  static const uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 21, 23, 25, 26, 28, 30, 31, 33, 35, 36, 38, 40, 41, 43, 45, 46, 48, 50, 51, 53, 55, 56, 58, 60, 61, 63, 65, 66, 68, 70, 71, 73, 75, 76, 78, 80, 81, 83, 85, 86, 88, 90, 91, 93, 95, 96, 98};
 
-    struct play_time *igt = &PLAY_TIME;
+  struct play_time* igt = &PLAY_TIME;
 
-    // Detect save file deletion: if IGT dropped below start time, reset the timer
-    if (!file_timer && (igt->seconds < start_time.seconds ||
-                        (igt->seconds == start_time.seconds && igt->frames < start_time.frames))) {
-        memset(&start_time, 0, sizeof(struct play_time));
-        file_timer = true;
-        SaveConfigurations();
-    }
+  // Detect save file deletion: if IGT dropped below start time, reset the timer
+  if (!file_timer && (igt->seconds < start_time.seconds ||
+                      (igt->seconds == start_time.seconds && igt->frames < start_time.frames))) {
+    memset(&start_time, 0, sizeof(struct play_time));
+    file_timer = true;
+    SaveConfigurations();
+  }
 
-    struct play_time run_igt;
-    IGTDifference(&run_igt, igt, &start_time);
+  struct play_time run_igt;
+  IGTDifference(&run_igt, igt, &start_time);
 
-    uint8_t run_hundreths = hundredths_lookup[run_igt.frames];
-    uint64_t seconds_divided = _u32_div_f(run_igt.seconds, 60);
-    uint8_t run_seconds = seconds_divided >> 32;
-    uint32_t run_minutes = seconds_divided & 0xFFFF;
-    uint64_t minutes_divided = _u32_div_f(run_minutes, 60);
-    run_minutes = minutes_divided >> 32;
-    uint16_t run_hours = minutes_divided & 0xFFFF;
+  uint8_t run_hundreths = hundredths_lookup[run_igt.frames];
+  uint64_t seconds_divided = _u32_div_f(run_igt.seconds, 60);
+  uint8_t run_seconds = seconds_divided >> 32;
+  uint32_t run_minutes = seconds_divided & 0xFFFF;
+  uint64_t minutes_divided = _u32_div_f(run_minutes, 60);
+  run_minutes = minutes_divided >> 32;
+  uint16_t run_hours = minutes_divided & 0xFFFF;
 
-    // Adjust x_offset based on the length of the text
-    int x_offset = DEFAULT_COL;
-    if (run_hours < 10) {
-        x_offset += 3 * CHAR_WIDTH;
-    } else if (run_hours < 100) {
-        x_offset += 2 * CHAR_WIDTH;
-    } else if (run_hours < 1000) {
-        x_offset += CHAR_WIDTH;
-    }
+  // Adjust x_offset based on the length of the text
+  int x_offset = DEFAULT_COL;
+  if (run_hours < 10) {
+    x_offset += 3 * CHAR_WIDTH;
+  } else if (run_hours < 100) {
+    x_offset += 2 * CHAR_WIDTH;
+  } else if (run_hours < 1000) {
+    x_offset += CHAR_WIDTH;
+  }
 
-    char time_string[HUD_LEN];
+  char time_string[HUD_LEN];
 #ifdef LAG_TEST
-    snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_igt.frames);
+  snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_igt.frames);
 #else
-    snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_hundreths);
+  snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_hundreths);
 #endif
 
-    // Make local copy to avoid data races
-    int current_split_remaining_frames_local = current_split.remaining_frames;
-    if (current_split_remaining_frames_local == SPLIT_SHOW_FRAMES) {
-        snprintf(current_split.string, HUD_LEN, "%s%s", SPLIT_COLOR_TAG, time_string);
-        current_split.x_offset = x_offset;
-    }
+  // Make local copy to avoid data races
+  int current_split_remaining_frames_local = current_split.remaining_frames;
+  if (current_split_remaining_frames_local == SPLIT_SHOW_FRAMES) {
+    snprintf(current_split.string, HUD_LEN, "%s%s", SPLIT_COLOR_TAG, time_string);
+    current_split.x_offset = x_offset;
+  }
 
-    if (current_split_remaining_frames_local > 0) {
-        UpdateHUDString(SPEEDRUN_HUD_TIMER, current_split.string, current_split.x_offset);
-        current_split.remaining_frames--;
-    } else {
-        UpdateHUDString(SPEEDRUN_HUD_TIMER, time_string, x_offset);
-    }
+  if (current_split_remaining_frames_local > 0) {
+    UpdateHUDString(SPEEDRUN_HUD_TIMER, current_split.string, current_split.x_offset);
+    current_split.remaining_frames--;
+  } else {
+    UpdateHUDString(SPEEDRUN_HUD_TIMER, time_string, x_offset);
+  }
 }

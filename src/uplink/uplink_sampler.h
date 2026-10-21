@@ -50,16 +50,16 @@
 // Validation results for the config commands; uplink.c maps them to the
 // "ERR <REASON>" reply lines.
 enum uplink_cfg_err {
-    UPLINK_CFG_OK = 0,
-    UPLINK_CFG_ERR_VER,
-    UPLINK_CFG_ERR_COUNT,
-    UPLINK_CFG_ERR_FULL,
-    UPLINK_CFG_ERR_IDX,
-    UPLINK_CFG_ERR_WIDTH,
-    UPLINK_CFG_ERR_STEPS,
-    UPLINK_CFG_ERR_OFFSET,
-    UPLINK_CFG_ERR_BASE,
-    UPLINK_CFG_ERR_STATE,
+  UPLINK_CFG_OK = 0,
+  UPLINK_CFG_ERR_VER,
+  UPLINK_CFG_ERR_COUNT,
+  UPLINK_CFG_ERR_FULL,
+  UPLINK_CFG_ERR_IDX,
+  UPLINK_CFG_ERR_WIDTH,
+  UPLINK_CFG_ERR_STEPS,
+  UPLINK_CFG_ERR_OFFSET,
+  UPLINK_CFG_ERR_BASE,
+  UPLINK_CFG_ERR_STATE,
 };
 
 // Linkable counters (crash-dump SYS block + PING reply)
@@ -82,7 +82,7 @@ enum uplink_cfg_err uplink_sampler_configure_begin(uint8_t version, uint16_t cou
 // Parse + validate + compile one CONFIG_ENTRY command (raw bytes, starting
 // with the command id) and append it to the staging area. len must be the
 // full command length (8 + 3*steps).
-enum uplink_cfg_err uplink_sampler_configure_entry(const uint8_t *cmd, uint16_t len);
+enum uplink_cfg_err uplink_sampler_configure_entry(const uint8_t* cmd, uint16_t len);
 
 // Promote the staging area to the live table and bump the epoch.
 void uplink_sampler_configure_commit(void);
@@ -117,7 +117,7 @@ bool uplink_sampler_frame_start(void);
 // checksum intact on the wire. The next call returns 0, which terminates
 // the caller's pull loop. The seq counter increments when the frame is
 // built (a frame dropped before that consumes no seq).
-uint32_t uplink_sampler_frame_fill(uint8_t *dst, uint32_t dst_len);
+uint32_t uplink_sampler_frame_fill(uint8_t* dst, uint32_t dst_len);
 
 // Abandon the current frame (e.g. the card died mid-frame). No seq is
 // consumed.

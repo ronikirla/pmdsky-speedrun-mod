@@ -22,8 +22,8 @@
 #define VBLANK_ROUTINE_THREAD_PRIO 10
 #define MAIN_ROUTINE_THREAD_PRIO 30
 
-void VCount0Routine(void *);
-void MainRoutine(void *);
+void VCount0Routine(void*);
+void MainRoutine(void*);
 
 struct thread vblank_routine_thread;
 struct thread main_routine_thread;
@@ -51,11 +51,11 @@ uint64_t main_routine_thread_stack[STACK_SIZE_2KB / sizeof(uint64_t)];
 volatile unsigned int mod_main_stack_used = 0;
 
 static void paint_main_stack(void) {
-    uint8_t *p = (uint8_t *)main_routine_thread_stack;
-    uint32_t n = sizeof(main_routine_thread_stack);
-    for (uint32_t i = 0; i < n; i++) {
-        p[i] = MAIN_STACK_PAINT_BYTE;
-    }
+  uint8_t* p = (uint8_t*)main_routine_thread_stack;
+  uint32_t n = sizeof(main_routine_thread_stack);
+  for (uint32_t i = 0; i < n; i++) {
+    p[i] = MAIN_STACK_PAINT_BYTE;
+  }
 }
 
 // Scan the painted stack for the lowest touched byte (stack grows down,
@@ -63,19 +63,19 @@ static void paint_main_stack(void) {
 // while the main routine may be running — read-only, so a torn view is
 // harmless for a diagnostic.
 static void scan_main_stack(void) {
-    uint8_t *p = (uint8_t *)main_routine_thread_stack;
-    uint32_t n = sizeof(main_routine_thread_stack);
-    for (uint32_t i = 0; i < n; i++) {
-        if (p[i] != MAIN_STACK_PAINT_BYTE) {
-            uint32_t used = n - i;
-            if (used > mod_main_stack_used) {
-                mod_main_stack_used = used;
-            }
-            return;
-        }
+  uint8_t* p = (uint8_t*)main_routine_thread_stack;
+  uint32_t n = sizeof(main_routine_thread_stack);
+  for (uint32_t i = 0; i < n; i++) {
+    if (p[i] != MAIN_STACK_PAINT_BYTE) {
+      uint32_t used = n - i;
+      if (used > mod_main_stack_used) {
+        mod_main_stack_used = used;
+      }
+      return;
     }
-    // Whole stack touched: overflow territory. Report the full size.
-    mod_main_stack_used = n;
+  }
+  // Whole stack touched: overflow territory. Report the full size.
+  mod_main_stack_used = n;
 }
 
 // Dedicated wake queue for the mod's threads. The VCount 0 hook wakes the
@@ -92,74 +92,70 @@ struct os_thread_queue mod_wake_queue;
 uint32_t mod_wake_count = 0;
 
 __attribute__((used)) void InitThreads(void) {
-    OS_CreateThread(&vblank_routine_thread, VCount0Routine, NULL,
-                    vblank_routine_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t),
-                    STACK_SIZE_1KB, VBLANK_ROUTINE_THREAD_PRIO);
-    OS_CreateThread(&main_routine_thread, MainRoutine, NULL,
-                    main_routine_thread_stack + STACK_SIZE_2KB / sizeof(uint64_t),
-                    STACK_SIZE_2KB, MAIN_ROUTINE_THREAD_PRIO);
-    // Paint the main routine's stack AFTER OS_CreateThread: the SDK wipes
-    // the stack region at thread creation (MI_CpuClear32 in
-    // OS_CreateThread), so a pre-creation paint never survived and the
-    // periodic scan always read the wipe — latching stack=2048 forever.
-    // Safe ordering: OS_WakeupThreadDirect below only marks the threads
-    // runnable; the scheduler runs them at the next yield, after this
-    // function (same priority, not preempted by lower-priority threads)
-    // has finished painting.
-    paint_main_stack();
-    // One-time startup wake per thread (the SDK idiom, see CARDi_InitCommon):
-    // OS_CreateThread leaves the thread waiting but not linked into any queue,
-    // so OS_WakeupThread(&mod_wake_queue) could never start it. This direct wake
-    // is safe here - freshly created threads have queue == NULL and empty link
-    // fields, so no stale queue node can result. Every later wake goes through
-    // the queue (see WakeupThreads).
-    OS_WakeupThreadDirect(&vblank_routine_thread);
-    OS_WakeupThreadDirect(&main_routine_thread);
+  OS_CreateThread(&vblank_routine_thread, VCount0Routine, NULL, vblank_routine_thread_stack + STACK_SIZE_1KB / sizeof(uint64_t), STACK_SIZE_1KB, VBLANK_ROUTINE_THREAD_PRIO);
+  OS_CreateThread(&main_routine_thread, MainRoutine, NULL, main_routine_thread_stack + STACK_SIZE_2KB / sizeof(uint64_t), STACK_SIZE_2KB, MAIN_ROUTINE_THREAD_PRIO);
+  // Paint the main routine's stack AFTER OS_CreateThread: the SDK wipes
+  // the stack region at thread creation (MI_CpuClear32 in
+  // OS_CreateThread), so a pre-creation paint never survived and the
+  // periodic scan always read the wipe — latching stack=2048 forever.
+  // Safe ordering: OS_WakeupThreadDirect below only marks the threads
+  // runnable; the scheduler runs them at the next yield, after this
+  // function (same priority, not preempted by lower-priority threads)
+  // has finished painting.
+  paint_main_stack();
+  // One-time startup wake per thread (the SDK idiom, see CARDi_InitCommon):
+  // OS_CreateThread leaves the thread waiting but not linked into any queue,
+  // so OS_WakeupThread(&mod_wake_queue) could never start it. This direct wake
+  // is safe here - freshly created threads have queue == NULL and empty link
+  // fields, so no stale queue node can result. Every later wake goes through
+  // the queue (see WakeupThreads).
+  OS_WakeupThreadDirect(&vblank_routine_thread);
+  OS_WakeupThreadDirect(&main_routine_thread);
 }
 
 __attribute__((used)) void WakeupThreads(void) {
-    mod_wake_count++;
-    // Wake the whole queue: waiters are unlinked cleanly (see mod_wake_queue).
-    OS_WakeupThread(&mod_wake_queue);
+  mod_wake_count++;
+  // Wake the whole queue: waiters are unlinked cleanly (see mod_wake_queue).
+  OS_WakeupThread(&mod_wake_queue);
 }
 
 // High priority routine to perform every frame on VCount 0.
 // Currently just keeps track of the FPS and idle time.
 // Remember thread safety! When writing to a shared resource,
 // see what could happen in other threads
-void VCount0Routine(void *) {
-    uint32_t scan_divider = 0;
-    while (true) {
-        CalculateFPS();
-        UpdateAPSIdleTime();
-        // Stack high-water scan every 16 frames (~4 Hz): cheap (a few hundred
-        // byte compares) and catches every deep path that lasts >16 ms.
-        if (++scan_divider >= 16) {
-            scan_divider = 0;
-            scan_main_stack();
-        }
-        CheckIfShouldCrashDump();
-        OS_SleepThread(&mod_wake_queue);
+void VCount0Routine(void*) {
+  uint32_t scan_divider = 0;
+  while (true) {
+    CalculateFPS();
+    UpdateAPSIdleTime();
+    // Stack high-water scan every 16 frames (~4 Hz): cheap (a few hundred
+    // byte compares) and catches every deep path that lasts >16 ms.
+    if (++scan_divider >= 16) {
+      scan_divider = 0;
+      scan_main_stack();
     }
+    CheckIfShouldCrashDump();
+    OS_SleepThread(&mod_wake_queue);
+  }
 }
 
 // Low priority routine to minimize the performance impact of the
 // mod by only running it while we would be sleeping
-void MainRoutine(void *) {
-    while (true) {
-        UplinkInit();
-        HandleSoftReset();
-        HandleHUDToggle();
-        HandleSpeedToggle();
-        HandleTimerInput();
-        HandleAPSInput();
-        UpdateTimer();
-        UpdateFPS();
-        UpdateAPS();
-        UpdateInputDisplay();
-        UpdateHUDSlots();
-        SaveIGT(true);
-        UplinkPoll();
-        OS_SleepThread(&mod_wake_queue);
-    }
+void MainRoutine(void*) {
+  while (true) {
+    UplinkInit();
+    HandleSoftReset();
+    HandleHUDToggle();
+    HandleSpeedToggle();
+    HandleTimerInput();
+    HandleAPSInput();
+    UpdateTimer();
+    UpdateFPS();
+    UpdateAPS();
+    UpdateInputDisplay();
+    UpdateHUDSlots();
+    SaveIGT(true);
+    UplinkPoll();
+    OS_SleepThread(&mod_wake_queue);
+  }
 }

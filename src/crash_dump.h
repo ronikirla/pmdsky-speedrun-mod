@@ -220,7 +220,7 @@
 // sp_base points at the stack location of the original first instruction's
 // push result (the top of the stack at crash time). It is the snapshot base
 // of thread record 0.
-void CrashDumpWrite(uint32_t hook_id, const uint32_t *regs, uint32_t sp_base);
+void CrashDumpWrite(uint32_t hook_id, const uint32_t* regs, uint32_t sp_base);
 
 // Capture the live thread states and write the dump record (hook_id
 // CRASH_DUMP_HOOK_MANUAL). Called by the watchdog on L+R+X+Y.

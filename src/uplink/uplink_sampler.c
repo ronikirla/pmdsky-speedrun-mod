@@ -23,10 +23,10 @@ extern unsigned char PLAY_TIME_FRAME_COUNTER;
 // naturally aligned inside the struct, so only the array stride becomes
 // 14 (base reads turn into byte loads — a few per entry per frame).
 struct __attribute__((packed)) uplink_entry {
-    uint32_t base;
-    uint16_t steps[UPLINK_MAX_STEPS];
-    uint8_t width; // 1, 2 or 4
-    uint8_t nsteps;
+  uint32_t base;
+  uint16_t steps[UPLINK_MAX_STEPS];
+  uint8_t width; // 1, 2 or 4
+  uint8_t nsteps;
 };
 
 //--------------------------------------------------------------------+
@@ -55,11 +55,11 @@ static uint32_t s_seq;
 static bool s_frame_active;
 
 // Store a little-endian u32 at p
-static void put_le32(uint8_t *p, uint32_t v) {
-    p[0] = (uint8_t)v;
-    p[1] = (uint8_t)(v >> 8);
-    p[2] = (uint8_t)(v >> 16);
-    p[3] = (uint8_t)(v >> 24);
+static void put_le32(uint8_t* p, uint32_t v) {
+  p[0] = (uint8_t)v;
+  p[1] = (uint8_t)(v >> 8);
+  p[2] = (uint8_t)(v >> 16);
+  p[3] = (uint8_t)(v >> 24);
 }
 
 //--------------------------------------------------------------------+
@@ -69,37 +69,37 @@ static void put_le32(uint8_t *p, uint32_t v) {
 // True when [addr, addr+len) lies inside ARM9 main RAM. Null pointers
 // fail automatically (0 < RAM_BASE).
 static bool in_ram(uint32_t addr, uint32_t len) {
-    return addr >= RAM_BASE && addr < RAM_END && (RAM_END - addr) >= len;
+  return addr >= RAM_BASE && addr < RAM_END && (RAM_END - addr) >= len;
 }
 
 // Assemble a little-endian value from single-byte reads. Safe for any
 // address: ARM9 unaligned LDR/LDRH rotate instead of reading across the
 // word boundary, so misaligned addresses must not use wide loads.
 static uint32_t read_bytewise(uint32_t addr, uint8_t width) {
-    uint32_t v = 0;
-    for (uint8_t b = 0; b < width; b++) {
-        v |= (uint32_t)*(volatile uint8_t *)(addr + b) << (8 * b);
-    }
-    return v;
+  uint32_t v = 0;
+  for (uint8_t b = 0; b < width; b++) {
+    v |= (uint32_t)*(volatile uint8_t*)(addr + b) << (8 * b);
+  }
+  return v;
 }
 
 // Evaluate one entry for the current frame. Pointer paths are walked
 // every frame; any failed in_ram check yields 0 (never a hard crash).
-static uint32_t eval_entry(const struct uplink_entry *e) {
-    uint32_t cur = e->base;
-    for (uint8_t i = 0; i < e->nsteps; i++) {
-        cur += (uint32_t)(e->steps[i] & 0x7FFFu);
-        if (e->steps[i] & 0x8000u) {
-            if (!in_ram(cur, 4)) {
-                return 0;
-            }
-            cur = read_bytewise(cur, 4);
-        }
-    }
-    if (!in_ram(cur, e->width)) {
+static uint32_t eval_entry(const struct uplink_entry* e) {
+  uint32_t cur = e->base;
+  for (uint8_t i = 0; i < e->nsteps; i++) {
+    cur += (uint32_t)(e->steps[i] & 0x7FFFu);
+    if (e->steps[i] & 0x8000u) {
+      if (!in_ram(cur, 4)) {
         return 0;
+      }
+      cur = read_bytewise(cur, 4);
     }
-    return read_bytewise(cur, e->width);
+  }
+  if (!in_ram(cur, e->width)) {
+    return 0;
+  }
+  return read_bytewise(cur, e->width);
 }
 
 //--------------------------------------------------------------------+
@@ -107,114 +107,114 @@ static uint32_t eval_entry(const struct uplink_entry *e) {
 //--------------------------------------------------------------------+
 
 void uplink_sampler_init(void) {
-    uplink_frames_sent = 0;
-    uplink_frames_dropped = 0;
-    s_entry_count = 0;
-    s_staging_count = 0;
-    s_declared_count = 0;
-    s_epoch = 0;
-    s_seq = 0;
-    s_frame_active = false;
+  uplink_frames_sent = 0;
+  uplink_frames_dropped = 0;
+  s_entry_count = 0;
+  s_staging_count = 0;
+  s_declared_count = 0;
+  s_epoch = 0;
+  s_seq = 0;
+  s_frame_active = false;
 }
 
 enum uplink_cfg_err uplink_sampler_configure_begin(uint8_t version, uint16_t count) {
-    if (version != UPLINK_CONFIG_VERSION) {
-        return UPLINK_CFG_ERR_VER;
-    }
-    if (count == 0 || count > UPLINK_MAX_SAMPLES) {
-        return UPLINK_CFG_ERR_COUNT;
-    }
-    s_staging_count = 0;
-    s_declared_count = count;
-    s_frame_active = false; // kill any half-built frame
-    return UPLINK_CFG_OK;
+  if (version != UPLINK_CONFIG_VERSION) {
+    return UPLINK_CFG_ERR_VER;
+  }
+  if (count == 0 || count > UPLINK_MAX_SAMPLES) {
+    return UPLINK_CFG_ERR_COUNT;
+  }
+  s_staging_count = 0;
+  s_declared_count = count;
+  s_frame_active = false; // kill any half-built frame
+  return UPLINK_CFG_OK;
 }
 
-enum uplink_cfg_err uplink_sampler_configure_entry(const uint8_t *cmd, uint16_t len) {
-    // cmd[0] == UPLINK_CMD_CONFIG_ENTRY (checked by the caller's parser)
-    uint16_t idx = (uint16_t)(cmd[1] | ((uint16_t)cmd[2] << 8));
-    uint32_t base = (uint32_t)cmd[3] | ((uint32_t)cmd[4] << 8) |
-                    ((uint32_t)cmd[5] << 16) | ((uint32_t)cmd[6] << 24);
-    uint8_t meta = cmd[7];
-    uint8_t width_code = meta & 3u;
-    uint8_t nsteps = (meta >> 2) & 7u;
+enum uplink_cfg_err uplink_sampler_configure_entry(const uint8_t* cmd, uint16_t len) {
+  // cmd[0] == UPLINK_CMD_CONFIG_ENTRY (checked by the caller's parser)
+  uint16_t idx = (uint16_t)(cmd[1] | ((uint16_t)cmd[2] << 8));
+  uint32_t base = (uint32_t)cmd[3] | ((uint32_t)cmd[4] << 8) |
+                  ((uint32_t)cmd[5] << 16) | ((uint32_t)cmd[6] << 24);
+  uint8_t meta = cmd[7];
+  uint8_t width_code = meta & 3u;
+  uint8_t nsteps = (meta >> 2) & 7u;
 
-    if (width_code > 2) {
-        return UPLINK_CFG_ERR_WIDTH;
-    }
-    if (nsteps > UPLINK_MAX_STEPS) {
-        return UPLINK_CFG_ERR_STEPS;
-    }
-    uint16_t need = (uint16_t)(8 + 3 * nsteps);
-    if (len < need) {
-        return UPLINK_CFG_ERR_STATE; // parser guarantees the full command
-    }
-    if (idx > s_staging_count) {
-        return UPLINK_CFG_ERR_IDX; // gap: an earlier entry was lost
-    }
-    if (idx >= s_declared_count) {
-        return UPLINK_CFG_ERR_FULL;
-    }
-    // Direct entries must point into RAM (typo feedback). Pointer-path
-    // bases are pointer LOCATIONS and are accepted anywhere: the game only
-    // ever reads at deref targets and the final address, and each of those
-    // reads is RAM-checked per frame (a path based outside RAM, or on a
-    // pointer that is null for part of the game, simply samples 0 until it
-    // becomes valid — see eval_entry).
-    if (nsteps == 0 && !in_ram(base, 1)) {
-        return UPLINK_CFG_ERR_BASE;
-    }
+  if (width_code > 2) {
+    return UPLINK_CFG_ERR_WIDTH;
+  }
+  if (nsteps > UPLINK_MAX_STEPS) {
+    return UPLINK_CFG_ERR_STEPS;
+  }
+  uint16_t need = (uint16_t)(8 + 3 * nsteps);
+  if (len < need) {
+    return UPLINK_CFG_ERR_STATE; // parser guarantees the full command
+  }
+  if (idx > s_staging_count) {
+    return UPLINK_CFG_ERR_IDX; // gap: an earlier entry was lost
+  }
+  if (idx >= s_declared_count) {
+    return UPLINK_CFG_ERR_FULL;
+  }
+  // Direct entries must point into RAM (typo feedback). Pointer-path
+  // bases are pointer LOCATIONS and are accepted anywhere: the game only
+  // ever reads at deref targets and the final address, and each of those
+  // reads is RAM-checked per frame (a path based outside RAM, or on a
+  // pointer that is null for part of the game, simply samples 0 until it
+  // becomes valid — see eval_entry).
+  if (nsteps == 0 && !in_ram(base, 1)) {
+    return UPLINK_CFG_ERR_BASE;
+  }
 
-    // idx == s_staging_count: append the next entry. idx < s_staging_count:
-    // a RE-SENT entry (the reader retries a batch until OK ENTRIES
-    // confirms it) — overwrite in place, do not advance the count. This
-    // makes batch delivery retry-until-confirmed instead of one-shot.
-    struct uplink_entry *e = &s_table[idx];
-    for (uint8_t i = 0; i < nsteps; i++) {
-        const uint8_t *step = cmd + 8 + 3 * i;
-        uint16_t offset = (uint16_t)(step[0] | ((uint16_t)step[1] << 8));
-        if (offset > 0x7FFFu) {
-            return UPLINK_CFG_ERR_OFFSET;
-        }
-        // flags bit 0 = deref; remaining bits reserved (ignored)
-        e->steps[i] = offset | (step[2] & 1u ? 0x8000u : 0u);
+  // idx == s_staging_count: append the next entry. idx < s_staging_count:
+  // a RE-SENT entry (the reader retries a batch until OK ENTRIES
+  // confirms it) — overwrite in place, do not advance the count. This
+  // makes batch delivery retry-until-confirmed instead of one-shot.
+  struct uplink_entry* e = &s_table[idx];
+  for (uint8_t i = 0; i < nsteps; i++) {
+    const uint8_t* step = cmd + 8 + 3 * i;
+    uint16_t offset = (uint16_t)(step[0] | ((uint16_t)step[1] << 8));
+    if (offset > 0x7FFFu) {
+      return UPLINK_CFG_ERR_OFFSET;
     }
-    e->base = base;
-    e->width = (uint8_t)(1u << width_code); // 1, 2 or 4
-    e->nsteps = nsteps;
-    if (idx == s_staging_count) {
-        s_staging_count++;
-    }
-    return UPLINK_CFG_OK;
+    // flags bit 0 = deref; remaining bits reserved (ignored)
+    e->steps[i] = offset | (step[2] & 1u ? 0x8000u : 0u);
+  }
+  e->base = base;
+  e->width = (uint8_t)(1u << width_code); // 1, 2 or 4
+  e->nsteps = nsteps;
+  if (idx == s_staging_count) {
+    s_staging_count++;
+  }
+  return UPLINK_CFG_OK;
 }
 
 void uplink_sampler_configure_commit(void) {
-    s_entry_count = s_staging_count;
-    s_epoch++;
-    s_frame_active = false;
+  s_entry_count = s_staging_count;
+  s_epoch++;
+  s_frame_active = false;
 }
 
 void uplink_sampler_configure_abort(void) {
-    s_staging_count = 0;
-    s_declared_count = 0;
-    s_entry_count = 0;
-    s_frame_active = false;
+  s_staging_count = 0;
+  s_declared_count = 0;
+  s_entry_count = 0;
+  s_frame_active = false;
 }
 
 uint16_t uplink_sampler_staging_count(void) {
-    return s_staging_count;
+  return s_staging_count;
 }
 
 uint16_t uplink_sampler_declared_count(void) {
-    return s_declared_count;
+  return s_declared_count;
 }
 
 uint16_t uplink_sampler_entry_count(void) {
-    return s_entry_count;
+  return s_entry_count;
 }
 
 uint16_t uplink_sampler_epoch(void) {
-    return s_epoch;
+  return s_epoch;
 }
 
 //--------------------------------------------------------------------+
@@ -222,11 +222,11 @@ uint16_t uplink_sampler_epoch(void) {
 //--------------------------------------------------------------------+
 
 bool uplink_sampler_frame_start(void) {
-    if (s_frame_active || s_entry_count == 0) {
-        return false;
-    }
-    s_frame_active = true;
-    return true;
+  if (s_frame_active || s_entry_count == 0) {
+    return false;
+  }
+  s_frame_active = true;
+  return true;
 }
 
 // Build the complete frame into dst and return its length
@@ -234,76 +234,75 @@ bool uplink_sampler_frame_start(void) {
 // (frame consumed), which terminates the caller's pull loop. The seq
 // counter increments here — a frame dropped before this point consumes
 // no seq and leaves no gap in the host's seq stream.
-uint32_t uplink_sampler_frame_fill(uint8_t *dst, uint32_t dst_len) {
-    if (!s_frame_active) {
-        return 0;
-    }
-    uint16_t n = s_entry_count;
-    uint16_t frame_len = (uint16_t)(UPLINK_FRAME_HEADER_LEN + 4u * n + 2u);
-    if (dst_len < frame_len) {
-        // Cannot happen with the 512-byte scratch (max frame 498 bytes);
-        // drop the frame rather than ship a truncated one.
-        s_frame_active = false;
-        return 0;
-    }
-
-    // Header: magic, seq, game_frame, sample_count, epoch, reserved
-    dst[0] = 'P';
-    dst[1] = 'M';
-    put_le32(dst + 2, s_seq);
-    put_le32(dst + 6,
-             (uint32_t)PLAY_TIME_SECONDS * 60u + PLAY_TIME_FRAME_COUNTER);
-    dst[10] = (uint8_t)n;
-    dst[11] = (uint8_t)(n >> 8);
-    dst[12] = (uint8_t)s_epoch;
-    dst[13] = (uint8_t)(s_epoch >> 8);
-    dst[14] = 0;
-    dst[15] = 0;
-
-    // Samples (little-endian u32 each) folded into the checksum
-    uint32_t sum = 0;
-    for (uint16_t i = 0; i < n; i++) {
-        uint32_t v = eval_entry(&s_table[i]);
-        uint8_t *p = dst + UPLINK_FRAME_HEADER_LEN + 4u * i;
-        p[0] = (uint8_t)v;
-        p[1] = (uint8_t)(v >> 8);
-        p[2] = (uint8_t)(v >> 16);
-        p[3] = (uint8_t)(v >> 24);
-        sum += p[0];
-        sum += p[1];
-        sum += p[2];
-        sum += p[3];
-    }
-    // Header bytes are part of the checksum too
-    for (uint16_t i = 0; i < UPLINK_FRAME_HEADER_LEN; i++) {
-        sum += dst[i];
-    }
-
-    // Checksum: byte sum of everything before it (u16 wrap); the checksum
-    // bytes themselves are not part of it.
-    dst[frame_len - 2] = (uint8_t)(sum & 0xFFu);
-    dst[frame_len - 1] = (uint8_t)((sum >> 8) & 0xFFu);
-
-    // Sacrificial trailing byte. The card->firmware->USB transport
-    // consistently loses the LAST byte of each transaction's valid payload
-    // (v1 absorbed this invisibly: its 70-byte frames ended with 2 padding
-    // bytes after the checksum). Without a sacrificial byte the frame's
-    // high checksum byte IS the last byte and gets replaced by 00 on the
-    // wire (seen on device: stored=0x00AE vs expected=0x01AE). The reader
-    // parses frames by magic + declared length, so the extra byte is
-    // skipped as inter-frame garbage; the frame layout itself is unchanged.
-    dst[frame_len] = dst[frame_len - 1];
-
+uint32_t uplink_sampler_frame_fill(uint8_t* dst, uint32_t dst_len) {
+  if (!s_frame_active) {
+    return 0;
+  }
+  uint16_t n = s_entry_count;
+  uint16_t frame_len = (uint16_t)(UPLINK_FRAME_HEADER_LEN + 4u * n + 2u);
+  if (dst_len < frame_len) {
+    // Cannot happen with the 512-byte scratch (max frame 498 bytes);
+    // drop the frame rather than ship a truncated one.
     s_frame_active = false;
-    s_seq++;
-    return frame_len + 1u;
+    return 0;
+  }
+
+  // Header: magic, seq, game_frame, sample_count, epoch, reserved
+  dst[0] = 'P';
+  dst[1] = 'M';
+  put_le32(dst + 2, s_seq);
+  put_le32(dst + 6, (uint32_t)PLAY_TIME_SECONDS * 60u + PLAY_TIME_FRAME_COUNTER);
+  dst[10] = (uint8_t)n;
+  dst[11] = (uint8_t)(n >> 8);
+  dst[12] = (uint8_t)s_epoch;
+  dst[13] = (uint8_t)(s_epoch >> 8);
+  dst[14] = 0;
+  dst[15] = 0;
+
+  // Samples (little-endian u32 each) folded into the checksum
+  uint32_t sum = 0;
+  for (uint16_t i = 0; i < n; i++) {
+    uint32_t v = eval_entry(&s_table[i]);
+    uint8_t* p = dst + UPLINK_FRAME_HEADER_LEN + 4u * i;
+    p[0] = (uint8_t)v;
+    p[1] = (uint8_t)(v >> 8);
+    p[2] = (uint8_t)(v >> 16);
+    p[3] = (uint8_t)(v >> 24);
+    sum += p[0];
+    sum += p[1];
+    sum += p[2];
+    sum += p[3];
+  }
+  // Header bytes are part of the checksum too
+  for (uint16_t i = 0; i < UPLINK_FRAME_HEADER_LEN; i++) {
+    sum += dst[i];
+  }
+
+  // Checksum: byte sum of everything before it (u16 wrap); the checksum
+  // bytes themselves are not part of it.
+  dst[frame_len - 2] = (uint8_t)(sum & 0xFFu);
+  dst[frame_len - 1] = (uint8_t)((sum >> 8) & 0xFFu);
+
+  // Sacrificial trailing byte. The card->firmware->USB transport
+  // consistently loses the LAST byte of each transaction's valid payload
+  // (v1 absorbed this invisibly: its 70-byte frames ended with 2 padding
+  // bytes after the checksum). Without a sacrificial byte the frame's
+  // high checksum byte IS the last byte and gets replaced by 00 on the
+  // wire (seen on device: stored=0x00AE vs expected=0x01AE). The reader
+  // parses frames by magic + declared length, so the extra byte is
+  // skipped as inter-frame garbage; the frame layout itself is unchanged.
+  dst[frame_len] = dst[frame_len - 1];
+
+  s_frame_active = false;
+  s_seq++;
+  return frame_len + 1u;
 }
 
 void uplink_sampler_frame_abort(void) {
-    // Frames are built atomically; nothing to unwind.
-    s_frame_active = false;
+  // Frames are built atomically; nothing to unwind.
+  s_frame_active = false;
 }
 
 uint32_t uplink_sampler_get_seq(void) {
-    return s_seq;
+  return s_seq;
 }

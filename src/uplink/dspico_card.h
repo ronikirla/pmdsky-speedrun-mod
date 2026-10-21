@@ -26,12 +26,12 @@
 // Card controller registers (Slot A / Slot B shared layout)
 //--------------------------------------------------------------------+
 
-#define REG_MCCNT0 (*(volatile uint16_t *)0x040001A0)
-#define REG_MCD0 (*(volatile uint16_t *)0x040001A2)
-#define REG_MCCNT1 (*(volatile uint32_t *)0x040001A4)
-#define REG_MCCMD0 (*(volatile uint32_t *)0x040001A8)
-#define REG_MCCMD1 (*(volatile uint32_t *)0x040001AC)
-#define REG_MCD1 (*(volatile uint32_t *)0x04100010)
+#define REG_MCCNT0 (*(volatile uint16_t*)0x040001A0)
+#define REG_MCD0 (*(volatile uint16_t*)0x040001A2)
+#define REG_MCCNT1 (*(volatile uint32_t*)0x040001A4)
+#define REG_MCCMD0 (*(volatile uint32_t*)0x040001A8)
+#define REG_MCCMD1 (*(volatile uint32_t*)0x040001AC)
+#define REG_MCD1 (*(volatile uint32_t*)0x04100010)
 
 // REG_MCCNT0
 #define MCCNT0_MODE_MASK (1 << 13)
@@ -71,7 +71,7 @@
 //--------------------------------------------------------------------+
 
 #define DSPICO_CMD_USB_COMMAND(command, arguments) \
-    (0xE800000000000000ull | ((uint64_t)(command) << 48) | (arguments))
+  (0xE800000000000000ull | ((uint64_t)(command) << 48) | (arguments))
 #define DSPICO_CMD_USB_COMMAND_INIT DSPICO_CMD_USB_COMMAND(1, 0)
 #define DSPICO_CMD_USB_COMMAND_BEGIN_SET_ADDRESS DSPICO_CMD_USB_COMMAND(2, 0)
 #define DSPICO_CMD_USB_COMMAND_REMOTE_WAKEUP DSPICO_CMD_USB_COMMAND(3, 0)
@@ -86,11 +86,11 @@
 #define DSPICO_CMD_USB_COMMAND_EP_CLOSE(ep) DSPICO_CMD_USB_COMMAND(11, ((uint64_t)(ep) << 40))
 #define DSPICO_CMD_USB_COMMAND_FINISH_SET_ADDRESS(addr) DSPICO_CMD_USB_COMMAND(12, ((uint64_t)(addr) << 40))
 #define DSPICO_CMD_USB_COMMAND_EP_OPEN(ep, maxPktSize, xfer) \
-    DSPICO_CMD_USB_COMMAND(13, (((uint64_t)(ep) << 40) | ((uint64_t)((xfer) & 3) << 32) | ((uint64_t)((maxPktSize) & 0x7FF))))
+  DSPICO_CMD_USB_COMMAND(13, (((uint64_t)(ep) << 40) | ((uint64_t)((xfer) & 3) << 32) | ((uint64_t)((maxPktSize) & 0x7FF))))
 #define DSPICO_CMD_USB_COMMAND_CLEAR_EVENT_QUEUE DSPICO_CMD_USB_COMMAND(14, 0)
 #define DSPICO_CMD_USB_COMMAND_DEINIT DSPICO_CMD_USB_COMMAND(15, 0)
 #define DSPICO_CMD_USB_COMMAND_BEGIN_TRANSFER(ep, offset, length) \
-    DSPICO_CMD_USB_COMMAND(16, (((uint64_t)(ep) << 40) | ((uint64_t)(offset) << 32) | (length)))
+  DSPICO_CMD_USB_COMMAND(16, (((uint64_t)(ep) << 40) | ((uint64_t)(offset) << 32) | (length)))
 #define DSPICO_CMD_USB_COMMAND_INTERRUPT_ENABLE DSPICO_CMD_USB_COMMAND(17, 0)
 #define DSPICO_CMD_USB_COMMAND_INTERRUPT_DISABLE DSPICO_CMD_USB_COMMAND(18, 0)
 
@@ -98,23 +98,23 @@
 #define DSPICO_CMD_USB_GET_EVENT (0xEB00000000000000ull)
 
 #define DSPICO_CMD_USB_WRITE_DATA(offset, endpoint, isLast, totalLength) \
-    (0xE900000000000000ull | ((uint64_t)(offset) << 48) | ((uint64_t)(endpoint) << 40) | ((uint64_t)(isLast) << 32) | (totalLength))
+  (0xE900000000000000ull | ((uint64_t)(offset) << 48) | ((uint64_t)(endpoint) << 40) | ((uint64_t)(isLast) << 32) | (totalLength))
 #define DSPICO_CMD_USB_READ_DATA(offset, endpoint) \
-    (0xEA00000000000000ull | ((uint64_t)(offset) << 32) | ((uint64_t)(endpoint) << 40))
+  (0xEA00000000000000ull | ((uint64_t)(offset) << 32) | ((uint64_t)(endpoint) << 40))
 // MCCNT1 settings for plain command transactions (no data phase)
-#define DSPICO_USB_DEFAULT_COMMAND_SETTINGS                                                         \
-    (MCCNT1_DIR_READ | MCCNT1_RESET_OFF | MCCNT1_CLK_6_7_MHZ | MCCNT1_LEN_0 | MCCNT1_CMD_SCRAMBLE | \
-     MCCNT1_LATENCY2(0) | MCCNT1_CLOCK_SCRAMBLER | MCCNT1_READ_DATA_DESCRAMBLE | MCCNT1_LATENCY1(0))
+#define DSPICO_USB_DEFAULT_COMMAND_SETTINGS                                                       \
+  (MCCNT1_DIR_READ | MCCNT1_RESET_OFF | MCCNT1_CLK_6_7_MHZ | MCCNT1_LEN_0 | MCCNT1_CMD_SCRAMBLE | \
+   MCCNT1_LATENCY2(0) | MCCNT1_CLOCK_SCRAMBLER | MCCNT1_READ_DATA_DESCRAMBLE | MCCNT1_LATENCY1(0))
 
 // MCCNT1 settings for 512-byte card data phases (USB IN = write data to card)
-#define DSPICO_USB_WRITE_DATA_SETTINGS                                                                 \
-    (MCCNT1_DIR_WRITE | MCCNT1_RESET_OFF | MCCNT1_CLK_6_7_MHZ | MCCNT1_LEN_512 | MCCNT1_CMD_SCRAMBLE | \
-     MCCNT1_LATENCY2(8) | MCCNT1_CLOCK_SCRAMBLER | MCCNT1_READ_DATA_DESCRAMBLE | MCCNT1_LATENCY1(0))
+#define DSPICO_USB_WRITE_DATA_SETTINGS                                                               \
+  (MCCNT1_DIR_WRITE | MCCNT1_RESET_OFF | MCCNT1_CLK_6_7_MHZ | MCCNT1_LEN_512 | MCCNT1_CMD_SCRAMBLE | \
+   MCCNT1_LATENCY2(8) | MCCNT1_CLOCK_SCRAMBLER | MCCNT1_READ_DATA_DESCRAMBLE | MCCNT1_LATENCY1(0))
 
 // MCCNT1 settings for 512-byte card data phases (USB OUT = read data from card)
-#define DSPICO_USB_READ_DATA_SETTINGS                                                                 \
-    (MCCNT1_DIR_READ | MCCNT1_RESET_OFF | MCCNT1_CLK_6_7_MHZ | MCCNT1_LEN_512 | MCCNT1_CMD_SCRAMBLE | \
-     MCCNT1_LATENCY2(63) | MCCNT1_CLOCK_SCRAMBLER | MCCNT1_LATENCY1(0))
+#define DSPICO_USB_READ_DATA_SETTINGS                                                               \
+  (MCCNT1_DIR_READ | MCCNT1_RESET_OFF | MCCNT1_CLK_6_7_MHZ | MCCNT1_LEN_512 | MCCNT1_CMD_SCRAMBLE | \
+   MCCNT1_LATENCY2(63) | MCCNT1_CLOCK_SCRAMBLER | MCCNT1_LATENCY1(0))
 
 //--------------------------------------------------------------------+
 // Game lock API (PMDSky, verified against Ghidra in Phase 0)
@@ -147,5 +147,5 @@ void dspico_card_set_shutdown(bool shutdown);
 // cpu_write reads at most `valid_bytes` bytes from `src` and zero-pads the
 // rest of the phase (the DSpico only transfers `valid_bytes` of each 512-byte
 // double buffer; the remainder must be well-formed, not OOB garbage).
-void dspico_card_cpu_read(void *dst, uint32_t words);
-void dspico_card_cpu_write(const void *src, uint32_t words, uint32_t valid_bytes);
+void dspico_card_cpu_read(void* dst, uint32_t words);
+void dspico_card_cpu_write(const void* src, uint32_t words, uint32_t valid_bytes);
