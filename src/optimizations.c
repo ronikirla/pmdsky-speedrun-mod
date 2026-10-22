@@ -8,8 +8,9 @@
 #include "fps.h"
 #include "eeprom.h"
 
-#define THROTTLE_CYCLES_DS 100000
-#define THROTTLE_CYCLES_EMU 145000
+#define THROTTLE_CYCLES_DS 90000
+#define THROTTLE_CYCLES_EMU 153000
+#define THROTTLE_CYCLES_WIIU 600000
 
 enum optimization_mode optimization_mode = OPTIMIZATION_MODE_DEFAULT; // Shared resource, but only gets written to in main menu
 bool prev_held_opt = false;
@@ -55,7 +56,7 @@ enum optimization_mode GetOptimizationMode() {
 char* GetOptimizationModeString(void) {
   if (GetCurrentAPSSplit()->remaining_frames > 0)
     return "";
-  char* optimization_mode_strings[] = {"Throttle mode emu", "Throttle mode DS", "Normal mode", "Fast mode", "RNG viewer mode"};
+  char* optimization_mode_strings[] = {"Throttle mode DS", "Throttle mode emu", "Throttle mode WiiU", "Normal mode", "Fast mode", "RNG viewer mode"};
   return optimization_mode_strings[optimization_mode];
 }
 
@@ -108,6 +109,9 @@ __attribute__((used)) void SkipAICardRead(int string_id, struct entity* entity) 
     case OPTIMIZATION_MODE_THROTTLE_DS:
       OS_SpinWait(THROTTLE_CYCLES_DS);
       return;
+    case OPTIMIZATION_MODE_THROTTLE_WIIU:
+      OS_SpinWait(THROTTLE_CYCLES_WIIU);
+      return;
     case OPTIMIZATION_MODE_DEFAULT:
       SubstitutePlaceholderStringTags(0, entity, 0);
       return;
@@ -123,6 +127,7 @@ __attribute__((used)) void SubstitutePlaceholderStringTagsAndLogMessageByIdWithP
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_THROTTLE_EMU:
     case OPTIMIZATION_MODE_THROTTLE_DS:
+    case OPTIMIZATION_MODE_THROTTLE_WIIU:
     case OPTIMIZATION_MODE_FAST:
     case OPTIMIZATION_MODE_RNG_VIEWER:
       SubstitutePlaceholderStringTags(0, entity, 0);

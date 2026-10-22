@@ -3,9 +3,10 @@
 enum optimization_mode {
   OPTIMIZATION_MODE_THROTTLE_DS = 0,
   OPTIMIZATION_MODE_THROTTLE_EMU = 1,
-  OPTIMIZATION_MODE_DEFAULT = 2,
-  OPTIMIZATION_MODE_FAST = 3,
-  OPTIMIZATION_MODE_RNG_VIEWER = 4, // Spaghetti, not really an optimization mode but eh
+  OPTIMIZATION_MODE_THROTTLE_WIIU = 2,
+  OPTIMIZATION_MODE_DEFAULT = 3,
+  OPTIMIZATION_MODE_FAST = 4,
+  OPTIMIZATION_MODE_RNG_VIEWER = 5, // Spaghetti, not really an optimization mode but eh
 
   // sentinel value, always keep last
   OPTIMIZATION_MODE_COUNT
