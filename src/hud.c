@@ -8,6 +8,8 @@
 #define WINDOW_WIDTH_TOP 10
 #define WINDOW_OFFSET_TOP_LEFT 6
 #define WINDOW_OFFSET_TOP_RIGHT 22
+#define WINDOW_WIDTH_TOP_RIGHT 18
+#define WINDOW_HEIGHT_TOP_RIGHT 18
 
 #define WINDOW_WIDTH_BOTTOM 32
 #define WINDOW_OFFSET_BOTTOM 22
@@ -89,10 +91,7 @@ void UpdateHUD(enum hud_slot slot) {
   for (int i = 0; i < MAX_STRINGS; i++) {
     char* string = hud_status[slot].strings[i];
     if (string) {
-      DrawTextInWindow(window_id,
-                       *hud_status[slot].x_offsets[i],
-                       (slot == HUD_SLOT_BOTTOM) * TEXT_OFFSET_BOTTOM,
-                       string); 
+      DrawTextInWindow(window_id, *hud_status[slot].x_offsets[i], (slot == HUD_SLOT_BOTTOM) * TEXT_OFFSET_BOTTOM, string);
     }
   }
   UpdateWindow(window_id);
@@ -109,7 +108,7 @@ void AssignHUDSlot(enum hud_slot slot, int string_idx, char* string_pointer, uin
 // Set the string pointers of every HUD slot to null
 void ClearHUDSlots(void) {
   for (int i = 0; i < HUD_SLOTS; i++) {
-    enum hud_slot slot = (enum hud_slot) i;
+    enum hud_slot slot = (enum hud_slot)i;
     for (int j = 0; j < MAX_STRINGS; j++) {
       AssignHUDSlot(slot, j, NULL, NULL);
     }
@@ -137,7 +136,7 @@ void CloseHUD(enum hud_slot slot) {
     OS_SetThreadPriority(&main_routine_thread, INCREASED_THREAD_PRIO);
     OS_SetThreadPriority(&main_routine_thread, regular_thread_prio);
   }
-  
+
   CloseTextBox(hud_status[slot].window_id);
   hud_status[slot].window_id = -1;
 }
@@ -166,7 +165,7 @@ bool start_held_during_nonblocking_fade;
 
 void SubSetBrightnessNonblockingEntry(int brightness) {
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (void*) &held_buttons);
+  GetHeldButtons(0, (void*)&held_buttons);
   start_held_during_nonblocking_fade = brightness != 0 && held_buttons.start;
 }
 
@@ -209,7 +208,7 @@ __attribute__((used)) void HijackUnloadMenuStateCall(void) {
 // when saying no to the player name prompt with the HUD open
 __attribute__((used)) void HijackPlayerNamePromptAndCloseHUD(void) {
   name_prompt_fix = true;
-  NamePrompt(0,0,0);
+  NamePrompt(0, 0, 0);
 }
 
 // Return number of open windows
@@ -233,11 +232,11 @@ void HandleTooManyWindows(int open) {
   if (open >= WINDOW_LIST_LEN - 1) {
     too_many_windows = true;
     for (int i = 0; i < HUD_SLOTS; i++) {
-      CloseHUD((enum hud_slot) i);
+      CloseHUD((enum hud_slot)i);
     }
-  // We need to have 1 less window open before we open the HUD again because otherwise
-  // closing the HUD would cause enough slots to be free only for the HUD to be opened
-  // right back up again 
+    // We need to have 1 less window open before we open the HUD again because otherwise
+    // closing the HUD would cause enough slots to be free only for the HUD to be opened
+    // right back up again
   } else if (open + HUD_SLOTS <= WINDOW_LIST_LEN - 2) {
     too_many_windows = false;
   }
@@ -277,11 +276,11 @@ __attribute__((naked)) void HijackTeamNamePromptConfirm(void) {
 // HUD creation/closing handling. Hook into SetBrightness so we can easily tell when the screen is faded.
 // The reason we need to do this is because leaving any windows open over a fade will cause memory corruption.
 __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brightness) {
-  void(* hud_func)(enum hud_slot);
+  void (*hud_func)(enum hud_slot);
   // Faded as in fully black or white
   bool faded = (brightness >= 0xFF || brightness <= -0xFF);
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (void*) &held_buttons);
+  GetHeldButtons(0, (void*)&held_buttons);
   // Workaround to allow buffering CancelRecoverCommon (aka. dinner skip) during a fade
   bool start_held_during_fade = screen == SCREEN_MAIN && held_buttons.start && brightness != 0;
   start_held_during_nonblocking_fade = start_held_during_nonblocking_fade && OverlayIsLoaded(OGROUP_OVERLAY_11);
@@ -293,7 +292,7 @@ __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brigh
     // by duct tape and completely corrupts everything if you try to create a
     // text box while any menu is open. Disable this check in the main menu,
     // quiz and sky jukebox because those are constantly in menu state and
-    // the corruption is not a concern since it can only happen in a 
+    // the corruption is not a concern since it can only happen in a
     // nonblocking fade state that is only used in ground mode.
     if (menu_open && screen == SCREEN_MAIN &&
         !OverlayIsLoaded(OGROUP_OVERLAY_1) &&
@@ -303,7 +302,7 @@ __attribute__((used)) void CustomSetBrightnessExit(enum screen screen, int brigh
     }
     hud_func = &CreateHUD;
   }
-  switch(screen) {
+  switch (screen) {
     case SCREEN_MAIN:
       (*hud_func)(HUD_SLOT_BOTTOM);
       break;

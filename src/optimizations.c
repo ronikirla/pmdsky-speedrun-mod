@@ -22,7 +22,7 @@ void HandleSpeedToggle(void) {
   }
 
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (void *)&held_buttons);
+  GetHeldButtons(0, (void*)&held_buttons);
 
   // 0 = None, -1 = Left (Decrement), 1 = Right (Increment)
   int direction = 0;
@@ -53,7 +53,7 @@ enum optimization_mode GetOptimizationMode() {
   return optimization_mode;
 }
 
-char *GetOptimizationModeString(void) {
+char* GetOptimizationModeString(void) {
   if (GetCurrentAPSSplit()->remaining_frames > 0)
     return "";
   char* optimization_mode_strings[] = {"Throttle mode Wii U", "Throttle mode emu", "Throttle mode DS", "Normal mode", "Fast mode", "RNG viewer mode"};
@@ -77,21 +77,20 @@ __attribute__((used)) bool CustomWaitTillVBlank(void) {
     default:
       // Original decompiled code
       bool uVar1;
-      bool *puVar2;
+      bool* puVar2;
       bool auStack_10[8];
-      extern bool *DAT_02003aac;
+      extern bool* DAT_02003aac;
 
       CallsChangeThreadPriority(auStack_10, 0xb);
       puVar2 = DAT_02003aac;
       if (DAT_02003aac[10] == '\0') {
         DAT_02003aac[9] = 1;
-        OS_SleepThread((void *)0x0);
+        OS_SleepThread((void*)0x0);
         DAT_02003aac[9] = 0;
-      }
-      else {
+      } else {
         DAT_02003aac[10] = 0;
         puVar2[7] = 1;
-        OS_SleepThread((void *)0x0);
+        OS_SleepThread((void*)0x0);
       }
       uVar1 = *DAT_02003aac;
       FUN_0200265c(auStack_10);
@@ -102,7 +101,7 @@ __attribute__((used)) bool CustomWaitTillVBlank(void) {
 // Unless optimizations are explicitly disabled, skip cart reads during AI calcs.
 // Note that even throttle mode gets optimized here, so we can manually add a
 // platform-independent amount of lag
-__attribute__((used)) void SkipAICardRead(int string_id, struct entity *entity) {
+__attribute__((used)) void SkipAICardRead(int string_id, struct entity* entity) {
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_THROTTLE_EMU:
       OS_SpinWait(THROTTLE_CYCLES_EMU);
@@ -118,11 +117,12 @@ __attribute__((used)) void SkipAICardRead(int string_id, struct entity *entity) 
       return;
     default:
       return;
-    }
   }
+}
 
 __attribute__((used)) void SubstitutePlaceholderStringTagsAndLogMessageByIdWithPopupCheckUser(
-    struct entity *entity, int message_id) {
+    struct entity* entity, int message_id
+) {
   // If we optimized the card read out, we need to still perform it when it's actually necessary
   switch (optimization_mode) {
     case OPTIMIZATION_MODE_THROTTLE_EMU:

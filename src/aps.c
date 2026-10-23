@@ -18,7 +18,7 @@
 
 struct aps {
   uint32_t idle_time;
-  uint32_t actions; // Shared resource
+  uint32_t actions;        // Shared resource
   enum action prev_action; // Shared resource
   bool running_prevent_aps_count;
   bool message_log_pause; // Shared resource
@@ -34,7 +34,7 @@ bool show_idle_seconds = false;
 struct aps_split current_aps_split;
 
 // Scuffed ram search for whether menu is open
-const int* menu_open_aps = (int*) 0x20afad0;
+const int* menu_open_aps = (int*)0x20afad0;
 
 void ResetAPS(void) {
   aps.idle_time = 1;
@@ -63,9 +63,7 @@ __attribute__((used)) void HijackSetLeaderActionAndCountAction(void) {
   SetLeaderAction();
   enum action curr_action = GetLeaderAction()->val;
   // Don't count instances where the action is caused by buffering or being locked to a dash
-  bool separate_input_action = curr_action == ACTION_PASS_TURN
-                            || (curr_action == ACTION_WALK && !DUNGEON_PTR_MASTER->leader_running)
-                            || aps.running_prevent_aps_count;
+  bool separate_input_action = curr_action == ACTION_PASS_TURN || (curr_action == ACTION_WALK && !DUNGEON_PTR_MASTER->leader_running) || aps.running_prevent_aps_count;
   if (aps.prev_action != curr_action || !separate_input_action) {
     aps.actions++;
     current_aps_split.remaining_frames = 0;
@@ -82,17 +80,18 @@ __attribute__((used)) bool HijackShouldLeaderKeepRunningAndPreventCount(void) {
 __attribute__((used)) void CustomMessageLogPauseLoop(undefined4 param_1, undefined4 message_log_struct, undefined2* message_log_inputs) {
   int i = 0;
   aps.message_log_pause = true;
-  while( true ) {
+  while (true) {
     if (0xef < i) {
       break;
     }
-    if (*(short *)(message_log_struct + 0x90) < 0xb4) {
+    if (*(short*)(message_log_struct + 0x90) < 0xb4) {
       break;
     }
     if ((*message_log_inputs & 3) == 3) {
       break;
     }
-    if ((message_log_inputs[1] & 0xf0) != 0) break;
+    if ((message_log_inputs[1] & 0xf0) != 0)
+      break;
     AdvanceFrame(param_1);
     i = i + 1;
   }
@@ -102,9 +101,9 @@ __attribute__((used)) void CustomMessageLogPauseLoop(undefined4 param_1, undefin
 void HandleAPSInput(void) {
   static bool prev_held_start_aps = false;
   static int32_t frames_since_last_start_press = -999; // Initialize so first press can't double-tap
-  
+
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (void*) &held_buttons);
+  GetHeldButtons(0, (void*)&held_buttons);
 
   // Detect start button press edge (pressed this frame, not pressed last frame)
   bool start_pressed_edge = held_buttons.start && !prev_held_start_aps;

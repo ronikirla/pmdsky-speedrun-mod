@@ -1,0 +1,229 @@
+#pragma once
+#include <pmdsky.h>
+
+// Crash dump: when FatalError or OS_Panic halts the game, the hook stub in
+// patches/patch.asm captures the registers and calls CrashDumpWrite, which
+// writes a self-validating record to the backup EEPROM for offline
+// inspection. The watchdog trigger writes the same
+// record on the L+R+X+Y button combo, for hangs that never reach a hook.
+// The record is left untouched on clean runs (all 0xFF).
+//
+// Since version 4 the record covers *every* thread: a fixed 0x100 header
+// describing the current (crashing/triggering) thread and the system state,
+// followed by packed variable-length thread records walked from
+// THREAD_INFO_STRUCT's thread list. The FatalError format string (the
+// "official" crash message) is still kept in the header. Version 4 adds, per
+// thread, the saved registers and the OS wait-queue linkage (queue/mutex/
+// link.prev/link.next/thread struct pointer) captured BEFORE the dump's own
+// card writes - that is the evidence needed to diagnose queue corruption
+// (lost waiters, spliced queues) of the kind the wake-queue rework fixes.
+//
+// Version 5 grew the record region to 0x8000 (0xb6b0..0x136b0) and made each
+// thread's snapshot bounded by the fair-share math instead of the staging
+// buffer: snapshots stream out in CRASH_DUMP_WRITE_CHUNK_SIZE pieces, one
+// staged memcpy + card write at a time. Version 6 shrinks the region to
+// 0x1140 (0xb6b0..0xc7f0, see the area note below) so a dump can never
+// clobber the mod's EEPROM config magic byte at 0xc7f0 - v5's region
+// extended over it and every dump wiped the HUD/optimization settings (seen
+// on device with the deslopification-era build). The header and
+// thread-record layouts are otherwise unchanged.
+//
+// Record layout at CRASH_DUMP_EEPROM_BASE (all little-endian):
+//
+// Header (0x100 bytes):
+//   0x000  u32  magic       ('CRSH')
+//   0x004  u32  version     (4)
+//   0x008  u32  hook_id     (CRASH_DUMP_HOOK_*)
+//   0x00C  u32  tick_lo     (OS_GetTickLo)
+//   0x010  u32  pc          (current thread: hooked instruction / trigger site)
+//   0x014  u32  lr
+//   0x018  u32  sp          (sp_base: snapshot base of thread record 0)
+//   0x01C  u32  cpsr
+//   0x020  u32  r0..r12     (13 words, 0x020..0x050; 0 for the manual trigger)
+//   0x054  u32  checksum    (sum of the words at 0x000..0x0FF except 0x054
+//                            and 0x0FC)
+//   0x058  u32  arg0..arg3  (original r0-r3 at hook entry; 0 for the manual
+//                            trigger)
+//   0x068  u32  msg_len     (byte count of msg, excluding the NUL; 0 if none)
+//   0x06C  u32  thread_count     (threads intended for the dump)
+//   0x070  u32  threads_written  (thread records actually written)
+//   0x074  u32  crashing_index   (index of the current thread's record; 0)
+//   0x078  u32  trigger_buttons (raw held_buttons bitfield for the manual
+//                                trigger, 0 for the hooks)
+//   0x07C  char msg[0x40]   (FatalError format string, NUL-terminated, at most
+//                            CRASH_DUMP_MSG_MAX = 0x3F bytes; empty otherwise)
+//   0x0BC  SYS block (16 words, captured before Card_LockBackup):
+//   0x0BC  u32  sys_reserved0     (0 - v5's uplink busy/lock-skip/lock-wait
+//   0x0C0  u32  sys_reserved1      counters were removed with the card
+//   0x0C4  u32  sys_reserved2      watchdog in the deslopification cleanup)
+//   0x0C8  u32  sys_wake_count    (mod_wake_count: VCount 0 hook liveliness)
+//   0x0CC  u32  sys_frame_flags   (DAT_02003aac[0],[7],[9],[10] as bytes
+//                                  0..3; 0xFFFFFFFF when unavailable)
+//   0x0D0  u32  sys_queue0_ptr, sys_queue0_head, sys_queue0_tail
+//   0x0DC  u32  sys_queue1_ptr, sys_queue1_head, sys_queue1_tail
+//   0x0E8  u32  sys_queue2_ptr, sys_queue2_head, sys_queue2_tail
+//                    (up to 3 distinct thread::queue pointers across the
+//                     dumped threads, validated before deref; 0 when unused)
+//   0x0F4  u32  sys_reserved0, sys_reserved1
+//   0x0FC  u32  complete    (0 while writing; the very last EEPROM write sets
+//                            1 - a 0 means the dump was interrupted)
+//
+// Thread records (packed from 0x100 on, variable length):
+//   +0x00  u32  magic        ('THRD')
+//   +0x04  u32  thread_id    (thread::thread_id; 0xFFFFFFFF when unknown)
+//   +0x08  u32  priority     (thread::sorting_order; 0xFFFFFFFF when unknown)
+//   +0x0C  u32  pc           (current thread: crash/trigger pc; other threads:
+//                            os_context::function_address_plus_4 - 4)
+//   +0x10  u32  lr           (os_context::exit_function)
+//   +0x14  u32  sp           (sp the snapshot starts at)
+//   +0x18  u32  stack_start  (low end of the thread's stack area)
+//   +0x1C  u32  stack_end    (high end, exclusive)
+//   +0x20  u32  state        (enum os_thread_state; 0xFFFFFFFF when unknown)
+//   +0x24  u32  snapshot_bytes (multiple of 4; the snapshot follows)
+//   +0x28  u32  flags        (CRASH_DUMP_THREAD_FLAG_*)
+//   +0x2C  u32  r0..r12      (13 words, 0x2C..0x5F: hook regs for record 0,
+//                            os_context::registers for the others)
+//   +0x60  u32  queue        (thread::queue - wait queue this thread is
+//                            sleeping on, 0 for NULL-queue sleeps)
+//   +0x64  u32  mutex        (thread::mutex, 0 when none)
+//   +0x68  u32  link_prev    (thread::link.prev - queue chain, 0 when none)
+//   +0x6C  u32  link_next    (thread::link.next - queue chain, 0 when none)
+//   +0x70  u32  thread_ptr   (address of the thread's struct thread; the key
+//                            the parser uses to walk queue chains)
+//   +0x74  u8   snapshot[snapshot_bytes]  (stack words from sp upward)
+//
+// Thread record 0 is always the current thread (the crashing thread, or the
+// watchdog for a manual trigger); the other records follow the game's thread
+// list order (highest priority first). Each record's snapshot gets a fair
+// share of the space that is still left (see StageThreadRecordHeader /
+// StreamSnapshot), so traces get shallower but always fit when the game has
+// many threads; with an empty v6 region and 16 threads that share is ~0x90
+// bytes per thread (v5's 0x8000 region gave ~0x77C - a full used stack), so
+// deep traces clip to their shallower frames. Snapshots stream out in
+// CRASH_DUMP_WRITE_CHUNK_SIZE pieces (each staged through the buffer before
+// its card write), so a snapshot can be longer than the buffer.
+//
+// Record region (v6): 0xb6b0..0xc7f0. The whole area is never written by
+// the game (game save slot 1 ends at 0xb65c; 0xb65c..0xb6aa is the mod's own
+// timer/config/RNG data; everything up to the magic byte at 0xc7f0 is
+// game-untouched), so a dump survives until the next dump overwrites it and
+// extracting the .sav never races an in-game save. The region ends exactly
+// at the mod's EEPROM config magic byte (src/eeprom.c): v5's 0x8000 region
+// extended over it and every dump wiped the HUD/optimization settings. With
+// 16 threads the fair-share snapshot is ~0x90 bytes per thread; pc/lr/sp and
+// the wait-queue linkage (the evidence the queue-corruption diagnoses used)
+// are header data and unaffected.
+
+#define CRASH_DUMP_EEPROM_BASE 0xb6b0
+#define CRASH_DUMP_SIZE 0x1140
+#define CRASH_DUMP_MAGIC 0x48535243 // 'CRSH'
+#define CRASH_DUMP_VERSION 6
+
+#define CRASH_DUMP_HOOK_FATAL_ERROR 1
+#define CRASH_DUMP_HOOK_OS_PANIC 2
+#define CRASH_DUMP_HOOK_MANUAL 3
+
+#define CRASH_DUMP_HEADER_SIZE 0x100
+// Max message bytes copied (excluding the NUL, which always fits in the
+// 0x40-byte field).
+#define CRASH_DUMP_MSG_MAX 0x3F
+#define CRASH_DUMP_WRITE_CHUNK_SIZE 0x100
+// The game has at most 16 threads; walking more than this many list entries
+// means the list is corrupt and ends the walk.
+#define CRASH_DUMP_MAX_THREADS 16
+// The record is staged in RAM one piece at a time (a crash handler must not
+// hold the whole record): the 0x100 header and each 0x74 thread-record
+// header through the buffer, each thread's snapshot in
+// CRASH_DUMP_WRITE_CHUNK_SIZE-sized pieces. Every staged piece is fully
+// copied before its card write, so each piece lands consistent even though
+// the source stack keeps living. The whole mod (code + data + BSS) shares
+// one 0x8010 linker region, so this buffer stays small (0x150 -> 0x100 in
+// v5 funded the streaming code); the per-thread snapshot is bounded by the
+// fair-share math in StageThreadRecordHeader only, never by this buffer.
+#define CRASH_DUMP_RECORD_BUFFER_SIZE 0x100
+
+#define CRASH_DUMP_OFF_MAGIC 0x000
+#define CRASH_DUMP_OFF_VERSION 0x004
+#define CRASH_DUMP_OFF_HOOK_ID 0x008
+#define CRASH_DUMP_OFF_TICK 0x00C
+#define CRASH_DUMP_OFF_PC 0x010
+#define CRASH_DUMP_OFF_LR 0x014
+#define CRASH_DUMP_OFF_SP 0x018
+#define CRASH_DUMP_OFF_CPSR 0x01C
+#define CRASH_DUMP_OFF_R0 0x020 // r0..r12 at 0x020..0x050
+#define CRASH_DUMP_OFF_CHECKSUM 0x054
+#define CRASH_DUMP_OFF_ARG0 0x058 // arg0..arg3 at 0x058..0x064
+#define CRASH_DUMP_OFF_ARG1 0x05C
+#define CRASH_DUMP_OFF_ARG2 0x060
+#define CRASH_DUMP_OFF_ARG3 0x064
+#define CRASH_DUMP_OFF_MSG_LEN 0x068
+#define CRASH_DUMP_OFF_THREAD_COUNT 0x06C
+#define CRASH_DUMP_OFF_THREADS_WRITTEN 0x070
+#define CRASH_DUMP_OFF_CRASHING_INDEX 0x074
+#define CRASH_DUMP_OFF_TRIGGER_BUTTONS 0x078
+#define CRASH_DUMP_OFF_MSG 0x07C // msg at 0x07C..0x0BB (0x40 bytes)
+// SYS block: system state captured before Card_LockBackup (16 words,
+// 0x0BC..0x0FB).
+#define CRASH_DUMP_OFF_SYS_BUSY_TIMEOUTS 0x0BC
+#define CRASH_DUMP_OFF_SYS_LOCK_SKIPS 0x0C0
+#define CRASH_DUMP_OFF_SYS_LOCK_WAITS 0x0C4
+#define CRASH_DUMP_OFF_SYS_WAKE_COUNT 0x0C8
+#define CRASH_DUMP_OFF_SYS_FRAME_FLAGS 0x0CC
+#define CRASH_DUMP_OFF_SYS_QUEUE_SAMPLES 0x0D0 // 3 x {ptr, head, tail}
+#define CRASH_DUMP_SYS_QUEUE_SAMPLES 3
+#define CRASH_DUMP_OFF_SYS_RESERVED 0x0F4 // 2 words
+#define CRASH_DUMP_OFF_COMPLETE 0x0FC
+
+#define CRASH_DUMP_THREAD_RECORD_MAGIC 0x44524854 // 'THRD'
+#define CRASH_DUMP_THREAD_RECORD_HEADER_SIZE 0x74
+
+#define CRASH_DUMP_THREAD_OFF_MAGIC 0x00
+#define CRASH_DUMP_THREAD_OFF_THREAD_ID 0x04
+#define CRASH_DUMP_THREAD_OFF_PRIORITY 0x08
+#define CRASH_DUMP_THREAD_OFF_PC 0x0C
+#define CRASH_DUMP_THREAD_OFF_LR 0x10
+#define CRASH_DUMP_THREAD_OFF_SP 0x14
+#define CRASH_DUMP_THREAD_OFF_STACK_START 0x18
+#define CRASH_DUMP_THREAD_OFF_STACK_END 0x1C
+#define CRASH_DUMP_THREAD_OFF_STATE 0x20
+#define CRASH_DUMP_THREAD_OFF_SNAPSHOT_BYTES 0x24
+#define CRASH_DUMP_THREAD_OFF_FLAGS 0x28
+#define CRASH_DUMP_THREAD_OFF_REGS 0x2C // r0..r12 at 0x2C..0x5F
+#define CRASH_DUMP_THREAD_OFF_QUEUE 0x60
+#define CRASH_DUMP_THREAD_OFF_MUTEX 0x64
+#define CRASH_DUMP_THREAD_OFF_LINK_PREV 0x68
+#define CRASH_DUMP_THREAD_OFF_LINK_NEXT 0x6C
+#define CRASH_DUMP_THREAD_OFF_THREAD_PTR 0x70
+#define CRASH_DUMP_THREAD_OFF_SNAPSHOT 0x74
+
+// The snapshot starts at a sp that is inside the thread's stack bounds.
+#define CRASH_DUMP_THREAD_FLAG_SP_VALID 1
+// This record is the current thread (record 0).
+#define CRASH_DUMP_THREAD_FLAG_CURRENT 2
+// The sp was outside the recorded stack bounds (or no struct thread matched
+// it) but the snapshot was still captured upward from sp - see
+// StageThreadRecordHeader.
+#define CRASH_DUMP_THREAD_FLAG_SP_OUTSIDE 4
+
+// Layout of the regs array passed in from the hook stubs:
+//   regs[0] = pc, regs[1] = lr, regs[2] = sp, regs[3] = cpsr,
+//   regs[4..16] = r0..r12
+// The manual trigger only fills pc/lr/sp/cpsr (the watchdog's registers are
+// not useful for diagnosing other threads).
+#define CRASH_DUMP_REG_PC 0
+#define CRASH_DUMP_REG_LR 1
+#define CRASH_DUMP_REG_SP 2
+#define CRASH_DUMP_REG_CPSR 3
+#define CRASH_DUMP_REG_R0 4
+#define CRASH_DUMP_REG_COUNT 17
+
+// sp_base points at the stack location of the original first instruction's
+// push result (the top of the stack at crash time). It is the snapshot base
+// of thread record 0.
+void CrashDumpWrite(uint32_t hook_id, const uint32_t* regs, uint32_t sp_base);
+
+// Capture the live thread states and write the dump record (hook_id
+// CRASH_DUMP_HOOK_MANUAL). Called by the watchdog on L+R+X+Y.
+void CrashDumpTrigger(void);
+
+void CheckIfShouldCrashDump(void);

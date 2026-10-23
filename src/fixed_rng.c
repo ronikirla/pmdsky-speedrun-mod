@@ -26,9 +26,9 @@ bool IsFixedRNG() {
 
 // Fixed RNG state variables (saved to EEPROM)
 struct fixed_rng_state fixed_rng_state = {
-  .calls_per_scenario = 0,
-  .scenario_prev = -1,
-  .level_prev = -1,
+    .calls_per_scenario = 0,
+    .scenario_prev = -1,
+    .level_prev = -1,
 };
 
 // Reset the rng to a state derived from a base seed and the current save progress
@@ -39,7 +39,7 @@ void ResetRngSeed() {
   if (!fixed_rng) {
     return;
   }
-  
+
   int scenario;
   int level;
   if (GetGameMode() == GAME_MODE_SPECIAL_EPISODE) {
@@ -49,7 +49,7 @@ void ResetRngSeed() {
     scenario = LoadScriptVariableValueAtIndex(NULL, VAR_SCENARIO_MAIN, 0);
     level = LoadScriptVariableValueAtIndex(NULL, VAR_SCENARIO_MAIN, 1);
   }
-  
+
   // We want to advance the RNG if the player does not progress in the game,
   // but we want it to sync up again once they do progress.
   if (fixed_rng_state.scenario_prev != scenario || fixed_rng_state.level_prev != level) {
@@ -57,9 +57,9 @@ void ResetRngSeed() {
   } else {
     fixed_rng_state.calls_per_scenario++;
   }
-  //Debug_Print0("scenario: %x\n", scenario);
-  //Debug_Print0("level: %x\n", level);
-  //Debug_Print0("call per scenario: %x\n", fixed_rng_state.calls_per_scenario);
+  // Debug_Print0("scenario: %x\n", scenario);
+  // Debug_Print0("level: %x\n", level);
+  // Debug_Print0("call per scenario: %x\n", fixed_rng_state.calls_per_scenario);
   fixed_rng_state.scenario_prev = scenario;
   fixed_rng_state.level_prev = level;
 
@@ -70,7 +70,7 @@ void ResetRngSeed() {
   Card_UnlockBackup(lock_id);
 
   uint16_t seed = base_rng_seed ^ scenario ^ (level << 5) ^ (fixed_rng_state.calls_per_scenario << 12);
-  //Debug_Print0("seed: %x\n", seed);
+  // Debug_Print0("seed: %x\n", seed);
   SetRngSeed(seed);
   Rand16Bit();
 }
@@ -81,7 +81,7 @@ __attribute__((used)) void HijackSetDungeonRngPreseedAndResetRngSeed() {
   ResetRngSeed();
   // We can use the full 32 bits of the base seed here because dungeon RNG is 32-bit
   int32_t preseed = (base_rng_seed & 0xFFFF0000) | Rand16Bit();
-  //Debug_Print0("preseed: %x\n", preseed);
+  // Debug_Print0("preseed: %x\n", preseed);
   SetDungeonRngPreseed(preseed);
 }
 
@@ -129,7 +129,7 @@ void UpdateSeedDisplay(char* buffer, bool empty) {
 
 // Set the rng seed to the value passed in the buffer
 __attribute__((used)) void SetFixedRNGSeed(char* buffer) {
-  //Debug_Print0("base seed: %x", base_rng_seed);
+  // Debug_Print0("base seed: %x", base_rng_seed);
   bool empty = strncmp(buffer, empty_result, INPUT_LEN) == 0;
   UpdateSeedDisplay(buffer, empty);
   // If the keyboard was left empty, disable fixed RNG
@@ -144,7 +144,7 @@ __attribute__((used)) void SetFixedRNGSeed(char* buffer) {
   for (uint16_t i = 0; i < INPUT_LEN; i++) {
     base_rng_seed += (buffer[i]) * (i + 1) * 256;
   }
-  //Debug_Print0("base seed: %x\n", base_rng_seed);
+  // Debug_Print0("base seed: %x\n", base_rng_seed);
 }
 
 // Replace the provided default value in the keyboard with a Rand16Bit() call result

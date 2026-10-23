@@ -13,7 +13,7 @@ static int SpChangeBorderColor(short arg1) {
 //
 // Set return_val to the return value that should be passed back to the game's script engine. Return true,
 // if the special process was handled.
-bool CustomScriptSpecialProcessCall(undefined4 *unknown, uint32_t special_process_id, short arg1, short arg2, int *return_val) {
+bool CustomScriptSpecialProcessCall(undefined4* unknown, uint32_t special_process_id, short arg1, short arg2, int* return_val) {
   switch (special_process_id) {
     case 100:
       *return_val = SpChangeBorderColor(arg1);

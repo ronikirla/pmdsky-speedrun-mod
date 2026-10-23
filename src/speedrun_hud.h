@@ -2,8 +2,7 @@
 
 #include "hud.h"
 
-enum hud_display_mode
-{
+enum hud_display_mode {
   HUD_DISPLAY_NONE = 0,
   HUD_DISPLAY_MINIMAL = 1,
   HUD_DISPLAY_MAXIMAL = 2,
@@ -14,8 +13,7 @@ enum hud_display_mode
 
 extern enum hud_display_mode hud_display_mode;
 
-enum speedrun_hud_string_type
-{
+enum speedrun_hud_string_type {
   SPEEDRUN_HUD_TIMER,
   SPEEDRUN_HUD_SEED,
   SPEEDRUN_HUD_FPS,
@@ -24,7 +22,7 @@ enum speedrun_hud_string_type
 };
 
 // Update the specified speedrun HUD string
-void UpdateHUDString(enum speedrun_hud_string_type shst, char *str, uint8_t x_offset);
+void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_offset);
 
 // Update the HUD slots at the end of every frame
 void UpdateHUDSlots(void);

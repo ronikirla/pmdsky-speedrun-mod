@@ -34,8 +34,7 @@ void SaveIGT(bool o30_check) {
   if (eeprom_timer.index == 0) {
     new_index = 1;
     eeprom_offset = 0x6;
-  }
-  else {
+  } else {
     new_index = 0;
     eeprom_offset = 0x1;
   }
@@ -112,7 +111,7 @@ void LoadIGTAndConfigurations(void) {
   if (eeprom_configurations.SRAM_show_idle_seconds != 0xFF) {
     SetShowIdleSeconds(eeprom_configurations.SRAM_show_idle_seconds);
   }
-  
+
   // Load RNG seed from EEPROM and apply it, then clear from EEPROM (only survives soft reset)
   char rng_seed_loaded[RNG_INPUT_LEN + 1];
   Card_ReadEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, rng_seed_loaded, RNG_INPUT_LEN + 1);
@@ -151,7 +150,7 @@ CLEANUP:
   char empty_seed[RNG_INPUT_LEN + 1];
   memset(empty_seed, 0xFF, RNG_INPUT_LEN + 1);
   Card_WriteAndVerifyEeprom(EEPROM_RNG_SEED_BASE_ADDRESS, empty_seed, RNG_INPUT_LEN + 1);
-  
+
   Card_UnlockBackup(eeprom_lock_id);
   igt_loaded = true;
 }

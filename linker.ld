@@ -3,6 +3,10 @@ MEMORY {
         out     : ORIGIN = 0x23D7FF0, LENGTH = 0x8010
 }
 
+/* Everything (mod + uplink) lives in the overlay 36 common area at
+   0x23D7FF0. The USB device stack itself lives in the DSpico firmware,
+   not the ROM; the uplink objects here are just the card-protocol and
+   sampler code, small enough to share the mod's region. */
 SECTIONS {
         .text : {
 
@@ -22,7 +26,7 @@ SECTIONS {
                 KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*)))
                 KEEP (*(.fini_array))
                 __fini_array_end = .;
-                
+
                 *(.init)
                 *(.text)
                 *(.fini)
@@ -37,6 +41,7 @@ SECTIONS {
                 . = ALIGN(4);
                 __bss_start__ = . ;
                 *(.bss)
+                *(.bss.*)
                 __bss_end__ = . ;
 
                 _end = __bss_end__ ;

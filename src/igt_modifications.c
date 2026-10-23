@@ -14,20 +14,22 @@ __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
 
   // Magic number for whether we are in the top menu of the main menu.
   // If not, then advance the play timer. Otherwise pause (normal behaviour)
-  int* main_menu_magic = (int*) 0x22a3670;
+  int* main_menu_magic = (int*)0x22a3670;
   bool is_paused = (*main_menu_magic == 0x22a3e94) || (PLAY_TIME_SECONDS == 0);
 
   if (is_paused) {
     // Timer is paused - count frames
     frames_paused++;
     // If play time is 0 then we selected new game, skip resume delay
-    if (PLAY_TIME_SECONDS != 0) was_paused = true;
+    if (PLAY_TIME_SECONDS != 0)
+      was_paused = true;
     resume_delay_remaining = 0;
   } else if (was_paused && resume_delay_remaining == 0) {
     // Transition from paused to running - calculate and set resume delay
     // Delay is max(10, 30 - frames_paused) to ensure at least 30 frames total
     int delay = 30 - frames_paused;
-    if (delay < 10) delay = 10;
+    if (delay < 10)
+      delay = 10;
     resume_delay_remaining = delay;
     frames_paused = 0;
     was_paused = false;
@@ -37,13 +39,13 @@ __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
     // Still in resume delay period
     resume_delay_remaining--;
   } else if (!just_finished_run) {
-    struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
+    struct play_time* igt = &PLAY_TIME;
     // Set start time to current igt if we reset the timer in the menu
     bool advance_start_time = false;
     if (IGTDifferenceFrames(igt, &start_time) == 0) {
       advance_start_time = true;
     }
-    PlayTimerTick((struct play_time*) &PLAY_TIME_SECONDS);
+    PlayTimerTick(igt);
     if (advance_start_time) {
       memcpy(&start_time, igt, sizeof(struct play_time));
     }
@@ -51,7 +53,7 @@ __attribute__((used)) uint8_t PlayTimerTickAndWaitTillVBlank(void) {
   return WaitTillVBlank();
 }
 
-void CustomPlayTimerTick(struct play_time *param_1) {
+void CustomPlayTimerTick(struct play_time* param_1) {
   char bVar1;
 
   bVar1 = param_1->frames + 1;
@@ -66,7 +68,7 @@ void CustomPlayTimerTick(struct play_time *param_1) {
   return;
 }
 
-void AddTimePenalty(struct play_time *play_time, int additional_frames) {
+void AddTimePenalty(struct play_time* play_time, int additional_frames) {
   if (!just_finished_run && PLAY_TIME_SECONDS) {
     int total_frames = play_time->frames + additional_frames;
     play_time->seconds += total_frames / 60;
@@ -75,13 +77,13 @@ void AddTimePenalty(struct play_time *play_time, int additional_frames) {
   }
 }
 
-__attribute__((used)) void *HijackNoteSaveBaseAndSetSaveVariable(void) {
+__attribute__((used)) void* HijackNoteSaveBaseAndSetSaveVariable(void) {
   is_saving = true;
-  void *res = MemAlloc(0xB65C, 5);
+  void* res = MemAlloc(0xB65C, 5);
   return res;
 }
 
-__attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimePenaltyByTheWay(void *whatever_this_was) {
+__attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimePenaltyByTheWay(void* whatever_this_was) {
   is_saving = false;
 
   AddTimePenalty(&PLAY_TIME, 200);
@@ -90,7 +92,7 @@ __attribute__((used)) void HijackNoteSaveBaseAndUnsetSaveVariableAndAlsoAddTimeP
   return;
 }
 
-__attribute__((used)) void CheckIfShouldIncrementPlayTimer(void *param_1) {
+__attribute__((used)) void CheckIfShouldIncrementPlayTimer(void* param_1) {
   if (!is_saving && !just_finished_run) {
     CustomPlayTimerTick(param_1);
   }

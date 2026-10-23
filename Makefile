@@ -52,8 +52,8 @@ ROM_OUT := out.nds
 
 TARGET		:=	out
 BUILD		:=	build
-SOURCES		:=	src src/cot
-INCLUDES	:=	include pmdsky-debug/headers
+SOURCES		:=	src src/cot src/uplink
+INCLUDES	:=	include pmdsky-debug/headers src/uplink src
 OPT_LEVEL := -O2
 
 # Change to "RELEASE_CONFIG := -DNDEBUG" for release builds without asserts and logs
@@ -72,7 +72,7 @@ CFLAGS	:=	-g -Wall $(OPT_LEVEL) $(RELEASE_CONFIG) $(SP_EFFECT_COMPAT) \
 			-fmacro-prefix-map=$(realpath $(CURDIR)/..)=. \
 			$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) -DARM9 -flto
+CFLAGS	+=	$(INCLUDE) -DARM9
 
 # Those are to be set by command line arguments.
 CFLAGS  +=  $(EXTRA_CFLAGS)
@@ -87,7 +87,11 @@ LDFLAGS	=	-T $(CURDIR)/../symbols/generated_$(REGION).ld \
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:= 
+# ARM9 has no hardware divide; -nostdlib suppresses the implicit -lgcc, so
+# pull in the __aeabi_* libgcc helpers (e.g. __aeabi_uidivmod) explicitly.
+# LIBS expands after $(OFILES) in the link rule, so the archive is scanned
+# after the objects that reference its members.
+LIBS	:=	-lgcc
  
  
 #---------------------------------------------------------------------------------
@@ -112,7 +116,7 @@ CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
 CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 BINFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.bin)))
- 
+
 #---------------------------------------------------------------------------------
 # use CXX for linking C++ projects, CC for standard C
 #---------------------------------------------------------------------------------

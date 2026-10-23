@@ -14,4 +14,4 @@ struct fixed_rng_state {
 extern char base_rng_text[RNG_INPUT_LEN + 1];
 extern struct fixed_rng_state fixed_rng_state;
 
-#define EEPROM_RNG_STATE_BASE_ADDRESS 0xb69B
+#define EEPROM_RNG_STATE_BASE_ADDRESS 0xB69B

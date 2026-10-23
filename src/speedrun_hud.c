@@ -30,15 +30,13 @@
 enum hud_display_mode hud_display_mode = HUD_DISPLAY_NONE;
 bool menu_maximal_override_active = false;
 
-struct speedrun_hud_string
-{
+struct speedrun_hud_string {
   char string[HUD_LEN];
   uint8_t base_x_offset; // This can be set in here to different values depending on slot
   uint8_t x_offset;      // This gets passed from the HUD component
 };
 
-struct speedrun_hud_strings
-{
+struct speedrun_hud_strings {
   struct speedrun_hud_string timer;
   struct speedrun_hud_string seed;
   struct speedrun_hud_string fps;
@@ -52,13 +50,13 @@ bool prev_held_srh = false;
 bool hud_slot_needs_update[HUD_SLOTS];
 
 // Update the specified speedrun HUD string
-void UpdateHUDString(enum speedrun_hud_string_type shst, char *str, uint8_t x_offset) {
-  struct speedrun_hud_string *timer = &speedrun_hud_strings.timer;
-  struct speedrun_hud_string *seed = &speedrun_hud_strings.seed;
-  struct speedrun_hud_string *fps = &speedrun_hud_strings.fps;
-  struct speedrun_hud_string *aps = &speedrun_hud_strings.aps;
-  struct speedrun_hud_string *input_display = &speedrun_hud_strings.input_display;
-  char *loc;
+void UpdateHUDString(enum speedrun_hud_string_type shst, char* str, uint8_t x_offset) {
+  struct speedrun_hud_string* timer = &speedrun_hud_strings.timer;
+  struct speedrun_hud_string* seed = &speedrun_hud_strings.seed;
+  struct speedrun_hud_string* fps = &speedrun_hud_strings.fps;
+  struct speedrun_hud_string* aps = &speedrun_hud_strings.aps;
+  struct speedrun_hud_string* input_display = &speedrun_hud_strings.input_display;
+  char* loc;
   enum hud_slot slot_minimal;
   enum hud_slot slot_maximal;
   switch (shst) {
@@ -101,7 +99,7 @@ void UpdateHUDString(enum speedrun_hud_string_type shst, char *str, uint8_t x_of
   if (menu_maximal_override_active) {
     effective_mode = HUD_DISPLAY_MAXIMAL;
   }
-  
+
   // Update the HUD slot that corresponds to the currently active mode
   switch (effective_mode) {
     case HUD_DISPLAY_NONE:
@@ -133,17 +131,17 @@ void UpdateHUDSlots(void) {
 
 // Assign the string pointers to all the necessary HUD slots depending on the current mode
 void AssignHUDSlots(void) {
-  struct speedrun_hud_string *timer = &speedrun_hud_strings.timer;
-  struct speedrun_hud_string *seed = &speedrun_hud_strings.seed;
-  struct speedrun_hud_string *fps = &speedrun_hud_strings.fps;
-  struct speedrun_hud_string *aps = &speedrun_hud_strings.aps;
-  struct speedrun_hud_string *input_display = &speedrun_hud_strings.input_display;
+  struct speedrun_hud_string* timer = &speedrun_hud_strings.timer;
+  struct speedrun_hud_string* seed = &speedrun_hud_strings.seed;
+  struct speedrun_hud_string* fps = &speedrun_hud_strings.fps;
+  struct speedrun_hud_string* aps = &speedrun_hud_strings.aps;
+  struct speedrun_hud_string* input_display = &speedrun_hud_strings.input_display;
   // Use maximal mode when in main menu with non-default optimization mode
   enum hud_display_mode effective_mode = hud_display_mode;
   if (menu_maximal_override_active) {
     effective_mode = HUD_DISPLAY_MAXIMAL;
   }
-  
+
   switch (effective_mode) {
     case HUD_DISPLAY_NONE:
       ClearHUDSlots();
@@ -154,14 +152,8 @@ void AssignHUDSlots(void) {
         timer->x_offset -= TIMER_BOTTOM_X_OFFSET;
       }
       ClearHUDSlots();
-      AssignHUDSlot(TIMER_SLOT_MINIMAL,
-                    TIMER_SLOT_MINIMAL_STRING_IDX,
-                    timer->string,
-                    &timer->x_offset);
-      AssignHUDSlot(SEED_SLOT_MINIMAL,
-                    SEED_SLOT_MINIMAL_STRING_IDX,
-                    seed->string,
-                    &seed->x_offset);
+      AssignHUDSlot(TIMER_SLOT_MINIMAL, TIMER_SLOT_MINIMAL_STRING_IDX, timer->string, &timer->x_offset);
+      AssignHUDSlot(SEED_SLOT_MINIMAL, SEED_SLOT_MINIMAL_STRING_IDX, seed->string, &seed->x_offset);
       break;
     case HUD_DISPLAY_MAXIMAL:
       if (timer->base_x_offset == 0) {
@@ -169,35 +161,20 @@ void AssignHUDSlots(void) {
         timer->x_offset += TIMER_BOTTOM_X_OFFSET;
       }
       ClearHUDSlots();
-      AssignHUDSlot(TIMER_SLOT_MAXIMAL,
-                    TIMER_SLOT_MAXIMAL_STRING_IDX,
-                    timer->string,
-                    &timer->x_offset);
-      AssignHUDSlot(SEED_SLOT_MAXIMAL,
-                    SEED_SLOT_MAXIMAL_STRING_IDX,
-                    seed->string,
-                    &seed->x_offset);
-      AssignHUDSlot(FPS_SLOT_MAXIMAL,
-                    FPS_SLOT_MAXIMAL_STRING_IDX,
-                    fps->string,
-                    &fps->x_offset);
-      AssignHUDSlot(APS_SLOT_MAXIMAL,
-                    APS_SLOT_MAXIMAL_STRING_IDX,
-                    aps->string,
-                    &aps->x_offset);
-      AssignHUDSlot(INPUT_DISPLAY_SLOT_MAXIMAL,
-                    INPUT_DISPLAY_SLOT_MAXIMAL_STRING_IDX,
-                    input_display->string,
-                    &input_display->x_offset);
+      AssignHUDSlot(TIMER_SLOT_MAXIMAL, TIMER_SLOT_MAXIMAL_STRING_IDX, timer->string, &timer->x_offset);
+      AssignHUDSlot(SEED_SLOT_MAXIMAL, SEED_SLOT_MAXIMAL_STRING_IDX, seed->string, &seed->x_offset);
+      AssignHUDSlot(FPS_SLOT_MAXIMAL, FPS_SLOT_MAXIMAL_STRING_IDX, fps->string, &fps->x_offset);
+      AssignHUDSlot(APS_SLOT_MAXIMAL, APS_SLOT_MAXIMAL_STRING_IDX, aps->string, &aps->x_offset);
+      AssignHUDSlot(INPUT_DISPLAY_SLOT_MAXIMAL, INPUT_DISPLAY_SLOT_MAXIMAL_STRING_IDX, input_display->string, &input_display->x_offset);
       break;
-      default:
+    default:
   }
 }
 
 // Read inputs to switch between HUD modes
 void HandleHUDToggle(void) {
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (void *)&held_buttons);
+  GetHeldButtons(0, (void*)&held_buttons);
   if (held_buttons.start && held_buttons.select && !held_buttons.r) {
     if (!prev_held_srh) {
       prev_held_srh = true;
@@ -217,8 +194,7 @@ void HandleHUDToggle(void) {
       AssignHUDSlots();
       SaveConfigurations();
     }
-  }
-  else {
+  } else {
     if (prev_held_srh)
       prev_held_srh = false;
   }

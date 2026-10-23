@@ -15,7 +15,7 @@ enum optimization_mode
 
 extern enum optimization_mode optimization_mode;
 
-char *GetOptimizationModeString(void);
+char* GetOptimizationModeString(void);
 
 enum optimization_mode GetOptimizationMode();
 

@@ -57,7 +57,7 @@ __attribute__((used)) void HijackCalcChecksumAndSplit(undefined* save_info, int 
 // Start+L for reset toggle, Select+L to show split time
 void HandleTimerInput(void) {
   struct held_buttons held_buttons;
-  GetHeldButtons(0, (void*) &held_buttons);
+  GetHeldButtons(0, (void*)&held_buttons);
   if (held_buttons.start && held_buttons.l && !held_buttons.r) {
     if (!prev_held_timer) {
       ResetAPS();
@@ -65,8 +65,7 @@ void HandleTimerInput(void) {
       prev_held_timer = true;
       current_split.remaining_frames = 0;
       if (file_timer) {
-        struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
-        memcpy(&start_time, igt, sizeof(struct play_time));
+        memcpy(&start_time, &PLAY_TIME, sizeof(struct play_time));
         file_timer = false;
       } else {
         memset(&start_time, 0, sizeof(struct play_time));
@@ -87,11 +86,11 @@ void HandleTimerInput(void) {
 void UpdateTimer(void) {
   static const uint8_t hundredths_lookup[60] = {0, 1, 3, 5, 6, 8, 10, 11, 13, 15, 16, 18, 20, 21, 23, 25, 26, 28, 30, 31, 33, 35, 36, 38, 40, 41, 43, 45, 46, 48, 50, 51, 53, 55, 56, 58, 60, 61, 63, 65, 66, 68, 70, 71, 73, 75, 76, 78, 80, 81, 83, 85, 86, 88, 90, 91, 93, 95, 96, 98};
 
-  struct play_time* igt = (struct play_time*) &PLAY_TIME_SECONDS;
+  struct play_time* igt = &PLAY_TIME;
 
   // Detect save file deletion: if IGT dropped below start time, reset the timer
-  if (!file_timer && (igt->seconds < start_time.seconds || 
-      (igt->seconds == start_time.seconds && igt->frames < start_time.frames))) {
+  if (!file_timer && (igt->seconds < start_time.seconds ||
+                      (igt->seconds == start_time.seconds && igt->frames < start_time.frames))) {
     memset(&start_time, 0, sizeof(struct play_time));
     file_timer = true;
     SaveConfigurations();
@@ -99,7 +98,7 @@ void UpdateTimer(void) {
 
   struct play_time run_igt;
   IGTDifference(&run_igt, igt, &start_time);
-  
+
   uint8_t run_hundreths = hundredths_lookup[run_igt.frames];
   uint64_t seconds_divided = _u32_div_f(run_igt.seconds, 60);
   uint8_t run_seconds = seconds_divided >> 32;
@@ -110,20 +109,20 @@ void UpdateTimer(void) {
 
   // Adjust x_offset based on the length of the text
   int x_offset = DEFAULT_COL;
-    if (run_hours < 10) {
-      x_offset += 3 * CHAR_WIDTH;
-    } else if (run_hours < 100) {
-      x_offset += 2 * CHAR_WIDTH;
-    } else if (run_hours < 1000) {
-      x_offset += CHAR_WIDTH;
-    }
+  if (run_hours < 10) {
+    x_offset += 3 * CHAR_WIDTH;
+  } else if (run_hours < 100) {
+    x_offset += 2 * CHAR_WIDTH;
+  } else if (run_hours < 1000) {
+    x_offset += CHAR_WIDTH;
+  }
 
   char time_string[HUD_LEN];
-  #ifdef LAG_TEST
+#ifdef LAG_TEST
   snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_igt.frames);
-  #else
+#else
   snprintf(time_string, HUD_LEN, "%01d:%02d:%02d.%02d", run_hours, run_minutes, run_seconds, run_hundreths);
-  #endif
+#endif
 
   // Make local copy to avoid data races
   int current_split_remaining_frames_local = current_split.remaining_frames;
@@ -138,5 +137,4 @@ void UpdateTimer(void) {
   } else {
     UpdateHUDString(SPEEDRUN_HUD_TIMER, time_string, x_offset);
   }
-
 }
