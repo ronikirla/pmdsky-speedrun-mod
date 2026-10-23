@@ -1,9 +1,10 @@
 #pragma once
 
-enum optimization_mode {
-  OPTIMIZATION_MODE_THROTTLE_DS = 0,
+enum optimization_mode
+{
+  OPTIMIZATION_MODE_THROTTLE_WIIU = 0,
   OPTIMIZATION_MODE_THROTTLE_EMU = 1,
-  OPTIMIZATION_MODE_THROTTLE_WIIU = 2,
+  OPTIMIZATION_MODE_THROTTLE_DS = 2,
   OPTIMIZATION_MODE_DEFAULT = 3,
   OPTIMIZATION_MODE_FAST = 4,
   OPTIMIZATION_MODE_RNG_VIEWER = 5, // Spaghetti, not really an optimization mode but eh

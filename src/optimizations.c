@@ -39,7 +39,7 @@ void HandleSpeedToggle(void) {
     }
 
     prev_held_opt = true;
-    optimization_mode = (optimization_mode + direction + 5) % 5;
+    optimization_mode = (optimization_mode + direction + OPTIMIZATION_MODE_COUNT) % OPTIMIZATION_MODE_COUNT;
 
     SaveConfigurations();
 
@@ -56,7 +56,7 @@ enum optimization_mode GetOptimizationMode() {
 char* GetOptimizationModeString(void) {
   if (GetCurrentAPSSplit()->remaining_frames > 0)
     return "";
-  char* optimization_mode_strings[] = {"Throttle mode DS", "Throttle mode emu", "Throttle mode WiiU", "Normal mode", "Fast mode", "RNG viewer mode"};
+  char* optimization_mode_strings[] = {"Throttle mode Wii U", "Throttle mode emu", "Throttle mode DS", "Normal mode", "Fast mode", "RNG viewer mode"};
   return optimization_mode_strings[optimization_mode];
 }
 
